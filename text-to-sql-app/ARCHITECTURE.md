@@ -38,6 +38,8 @@ No OpenAI or real LLM logic is connected yet.
 
 The Query Agent currently uses deterministic mocked SQL generation.
 
+A real prompt template exists at `backend/app/prompts/query_agent.md`, and a response parser exists in `backend/app/agents/query_agent.py`. The parser expects JSON with `sql`, `explanation`, `confidence`, and `assumptions`.
+
 The current flow is:
 
 1. Build module schema context with `build_agent_schema_context(module_id)`.
@@ -53,6 +55,8 @@ The current flow is:
 5. The validated query runs through `query_runner.py`.
 
 The future real SQL Agent must follow the same boundary: it must never receive raw Parquet data.
+
+When a real LLM is connected later, its raw response should pass through `parse_query_agent_response(raw_response)` before validation and execution.
 
 ## SQL Validation Flow
 

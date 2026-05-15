@@ -23,6 +23,7 @@
 - Added relationship metadata for joins.
 - Added `build_agent_schema_context(module_id)`.
 - Added mocked Query Agent SQL generation.
+- Added Query Agent prompt template and JSON response parser.
 - Added tests for SQL validation and registry query behavior.
 
 ## Current State
@@ -32,6 +33,7 @@
 - DuckDB returns real rows from local Parquet files.
 - Pax Forecast supports a real join between two registered Parquet tables.
 - Query Agent is responsible for deterministic mocked SQL generation.
+- Query Agent prompt and parser are ready for future LLM integration.
 - SQL is validated before execution.
 - No OpenAI, real LLM, or Response Agent logic is connected yet.
 
