@@ -9,7 +9,14 @@ from app.modules.registry import (
     get_module_config,
     get_registered_modules,
 )
-from app.schemas.api import AskRequest, AskResponse, ModuleConfig, TableDefinition
+from app.schemas.api import (
+    AskRequest,
+    AskResponse,
+    ColumnDefinition,
+    ModuleConfig,
+    RelationshipDefinition,
+    TableDefinition,
+)
 
 
 def get_modules() -> list[ModuleConfig]:
@@ -46,17 +53,37 @@ def to_api_module_config(module: RegistryModuleConfig) -> ModuleConfig:
         module_id=module.module_id,
         label=module.label,
         description=module.description,
-        data_path=module.data_path,
-        table_name=module.table_name,
-        table_definitions=[
+        tables=[
             TableDefinition(
-                name=table.name,
+                table_name=table.table_name,
+                data_path=table.data_path,
                 description=table.description,
-                columns=list(table.columns),
+                columns=[
+                    ColumnDefinition(
+                        name=column.name,
+                        type=column.type,
+                        description=column.description,
+                        examples=list(column.examples),
+                        business_terms=list(column.business_terms),
+                    )
+                    for column in table.columns
+                ],
             )
-            for table in module.table_definitions
+            for table in module.tables
+        ],
+        relationships=[
+            RelationshipDefinition(
+                left_table=relationship.left_table,
+                left_column=relationship.left_column,
+                right_table=relationship.right_table,
+                right_column=relationship.right_column,
+                relationship_type=relationship.relationship_type,
+                description=relationship.description,
+            )
+            for relationship in module.relationships
         ],
         example_questions=list(module.example_questions),
+        example_sql=list(module.example_sql),
     )
 
 
@@ -64,7 +91,8 @@ def build_processor_context(module: RegistryModuleConfig) -> dict[str, Any]:
     return {
         "module_id": module.module_id,
         "label": module.label,
-        "table_name": module.table_name,
-        "table_definitions": module.table_definitions,
+        "tables": module.tables,
+        "relationships": module.relationships,
         "example_questions": module.example_questions,
+        "example_sql": module.example_sql,
     }

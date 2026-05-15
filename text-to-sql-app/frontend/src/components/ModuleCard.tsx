@@ -21,6 +21,9 @@ const accentByModuleId: Partial<Record<ModuleId, keyof typeof accentClasses>> = 
 };
 
 export function ModuleCard({ module, selected, onSelect }: ModuleCardProps) {
+  const tableLabel =
+    module.tables.length === 1 ? module.tables[0].table_name : `${module.tables.length} tables`;
+
   return (
     <button
       className={`flex h-full min-h-48 flex-col rounded-lg border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 ${
@@ -33,7 +36,7 @@ export function ModuleCard({ module, selected, onSelect }: ModuleCardProps) {
       <span
         className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${accentClasses[accentByModuleId[module.module_id] ?? "teal"]}`}
       >
-        {module.table_name}
+        {tableLabel}
       </span>
       <span className="mt-4 text-lg font-semibold leading-6 text-slate-950">
         {module.label}

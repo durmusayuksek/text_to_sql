@@ -12,20 +12,38 @@ class HealthResponse(BaseModel):
 ModuleId = str
 
 
-class TableDefinition(BaseModel):
+class ColumnDefinition(BaseModel):
     name: str
+    type: str
     description: str
-    columns: list[str]
+    examples: list[str] = Field(default_factory=list)
+    business_terms: list[str] = Field(default_factory=list)
+
+
+class TableDefinition(BaseModel):
+    table_name: str
+    data_path: str
+    description: str
+    columns: list[ColumnDefinition]
+
+
+class RelationshipDefinition(BaseModel):
+    left_table: str
+    left_column: str
+    right_table: str
+    right_column: str
+    relationship_type: str
+    description: str
 
 
 class ModuleConfig(BaseModel):
     module_id: ModuleId
     label: str
     description: str
-    data_path: str
-    table_name: str
-    table_definitions: list[TableDefinition]
+    tables: list[TableDefinition]
+    relationships: list[RelationshipDefinition]
     example_questions: list[str]
+    example_sql: list[str]
 
 
 class AskRequest(BaseModel):

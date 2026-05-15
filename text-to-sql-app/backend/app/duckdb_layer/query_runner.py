@@ -32,21 +32,28 @@ class EmptyQueryResultError(QueryRunnerError):
 def run_query(module_id: str, sql: str) -> list[dict[str, Any]]:
     module = get_module_config(module_id)
     validated_sql = normalize_sql(sql)
+    allowed_table_names = [table.table_name for table in module.tables]
     try:
-        validate_sql(validated_sql, allowed_table_names=[module.table_name])
+        validate_sql(validated_sql, allowed_table_names=allowed_table_names)
     except SQLValidationError as error:
         raise InvalidQueryError(str(error)) from error
 
-    parquet_path = resolve_data_path(module.data_path)
-
-    if not parquet_path.exists():
-        raise MissingDataFileError(f"Parquet file not found for module '{module_id}': {module.data_path}")
-
-    assert_valid_identifier(module.table_name)
+    for table in module.tables:
+        assert_valid_identifier(table.table_name)
+        parquet_path = resolve_data_path(table.data_path)
+        if not parquet_path.exists():
+            raise MissingDataFileError(
+                f"Parquet file not found for module '{module_id}': {table.data_path}"
+            )
 
     connection = create_connection()
     try:
-        register_parquet_view(connection, module.table_name, parquet_path)
+        for table in module.tables:
+            register_parquet_view(
+                connection,
+                table.table_name,
+                resolve_data_path(table.data_path),
+            )
         result = connection.execute(limit_query(validated_sql))
         rows = result.fetchall()
         columns = [column[0] for column in result.description]
