@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.duckdb_layer.query_runner import run_query
 from app.duckdb_layer.sql_validator import validate_sql
 from app.modules.registry import (
     ModuleConfig as RegistryModuleConfig,
@@ -24,12 +25,14 @@ def build_mock_answer(request: AskRequest) -> AskResponse:
         question=request.question.strip(),
         context=build_processor_context(module),
     )
+    sql = validate_sql(result.sql)
+    rows = run_query(module.module_id, sql)
 
     return AskResponse(
         answer=result.answer,
-        sql=validate_sql(result.sql),
+        sql=sql,
         explanation=result.explanation,
-        data=result.data,
+        data=rows,
         module_id=module.module_id,
     )
 
@@ -45,6 +48,7 @@ def to_api_module_config(module: RegistryModuleConfig) -> ModuleConfig:
         label=module.label,
         description=module.description,
         data_path=module.data_path,
+        table_name=module.table_name,
         table_definitions=[
             TableDefinition(
                 name=table.name,
@@ -61,6 +65,7 @@ def build_processor_context(module: RegistryModuleConfig) -> dict[str, Any]:
     return {
         "module_id": module.module_id,
         "label": module.label,
+        "table_name": module.table_name,
         "table_definitions": module.table_definitions,
         "example_questions": module.example_questions,
     }

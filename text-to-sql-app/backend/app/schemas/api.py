@@ -9,7 +9,7 @@ class HealthResponse(BaseModel):
     environment: str
 
 
-ModuleId = Literal["pax_forecast", "special_cruise_profit", "qa"]
+ModuleId = str
 
 
 class TableDefinition(BaseModel):
@@ -23,6 +23,7 @@ class ModuleConfig(BaseModel):
     label: str
     description: str
     data_path: str
+    table_name: str
     table_definitions: list[TableDefinition]
     example_questions: list[str]
 

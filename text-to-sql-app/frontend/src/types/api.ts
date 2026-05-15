@@ -4,7 +4,7 @@ export interface HealthResponse {
   environment: string;
 }
 
-export type ModuleId = "pax_forecast" | "special_cruise_profit" | "qa";
+export type ModuleId = string;
 
 export interface TableDefinition {
   name: string;
@@ -17,6 +17,7 @@ export interface ModuleConfig {
   label: string;
   description: string;
   data_path: string;
+  table_name: string;
   table_definitions: TableDefinition[];
   example_questions: string[];
 }

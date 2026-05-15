@@ -14,7 +14,7 @@ const accentClasses: Record<Accent, string> = {
   teal: "border-teal-300 bg-teal-50 text-teal-700",
 };
 
-const accentByModuleId: Record<ModuleId, keyof typeof accentClasses> = {
+const accentByModuleId: Partial<Record<ModuleId, keyof typeof accentClasses>> = {
   pax_forecast: "teal",
   qa: "amber",
   special_cruise_profit: "indigo",
@@ -31,9 +31,9 @@ export function ModuleCard({ module, selected, onSelect }: ModuleCardProps) {
       onClick={() => onSelect(module.module_id)}
     >
       <span
-        className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${accentClasses[accentByModuleId[module.module_id]]}`}
+        className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${accentClasses[accentByModuleId[module.module_id] ?? "teal"]}`}
       >
-        {module.data_path}
+        {module.table_name}
       </span>
       <span className="mt-4 text-lg font-semibold leading-6 text-slate-950">
         {module.label}

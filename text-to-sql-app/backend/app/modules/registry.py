@@ -1,8 +1,8 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-ModuleId = Literal["pax_forecast", "special_cruise_profit", "qa"]
+ModuleId = str
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,7 @@ class ModuleConfig:
     label: str
     description: str
     data_path: str
+    table_name: str
     table_definitions: tuple[TableDefinition, ...]
     processor_function: ProcessorFunction
     example_questions: tuple[str, ...]
@@ -47,7 +48,8 @@ MODULE_REGISTRY: dict[ModuleId, ModuleConfig] = {
         module_id="pax_forecast",
         label="Pax Forecast",
         description="Ask forecasting questions about demand, occupancy, and passenger volume trends.",
-        data_path="data/pax_forecast",
+        data_path="data/pax_forecast/pax_forecast.parquet",
+        table_name="pax_forecast",
         table_definitions=(
             TableDefinition(
                 name="pax_forecast",
@@ -65,7 +67,8 @@ MODULE_REGISTRY: dict[ModuleId, ModuleConfig] = {
         module_id="special_cruise_profit",
         label="Special Cruise / Entertainment Profit Calculation",
         description="Explore revenue, cost, margin, and profitability scenarios for special cruise events.",
-        data_path="data/special_cruise",
+        data_path="data/special_cruise/special_cruise_profit.parquet",
+        table_name="special_cruise_profit",
         table_definitions=(
             TableDefinition(
                 name="special_cruise_profit",
@@ -83,10 +86,11 @@ MODULE_REGISTRY: dict[ModuleId, ModuleConfig] = {
         module_id="qa",
         label="Questions / Answers",
         description="Use a general analytical workspace for direct questions over prepared datasets.",
-        data_path="data/qa",
+        data_path="data/qa/qa.parquet",
+        table_name="qa",
         table_definitions=(
             TableDefinition(
-                name="qa_reference",
+                name="qa",
                 description="Placeholder table for general question answering inputs.",
                 columns=("topic", "metric", "value", "updated_at"),
             ),

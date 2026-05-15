@@ -2,6 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.duckdb_layer.query_runner import (
+    EmptyQueryResultError,
+    InvalidQueryError,
+    MissingDataFileError,
+)
 from app.modules.api_contract import UnknownModuleError, build_mock_answer, get_modules
 from app.schemas.api import AskRequest, AskResponse, HealthResponse, ModuleConfig
 
@@ -36,6 +41,12 @@ async def list_modules() -> list[ModuleConfig]:
 async def ask_question(request: AskRequest) -> AskResponse:
     try:
         return build_mock_answer(request)
+    except MissingDataFileError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    except EmptyQueryResultError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except InvalidQueryError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     except UnknownModuleError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except ValueError as error:
