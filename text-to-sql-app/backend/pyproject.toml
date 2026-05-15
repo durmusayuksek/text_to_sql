@@ -1,0 +1,16 @@
+[project]
+name = "text-to-sql-app-backend"
+version = "0.1.0"
+description = "FastAPI backend for a text-to-SQL application"
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.1.0",
+    "fastapi>=0.115.0",
+    "pydantic-settings>=2.7.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["../tests"]
+
