@@ -51,4 +51,5 @@ export interface AskResponse {
   explanation: string;
   data: Array<Record<string, string | number | boolean | null>>;
   module_id: ModuleId;
+  query_agent_mode: "mock" | "openai";
 }

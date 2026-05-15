@@ -57,3 +57,4 @@ class AskResponse(BaseModel):
     explanation: str
     data: list[dict[str, Any]]
     module_id: ModuleId
+    query_agent_mode: Literal["mock", "openai"]

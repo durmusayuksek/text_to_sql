@@ -1,6 +1,8 @@
+import re
 from typing import Any
 
 from app.agents.query_agent import generate_sql
+from app.config import refresh_settings
 from app.duckdb_layer.query_runner import run_query
 from app.modules.registry import (
     ModuleConfig as RegistryModuleConfig,
@@ -19,6 +21,15 @@ from app.schemas.api import (
     TableDefinition,
 )
 
+DESTRUCTIVE_INTENT_PATTERN = re.compile(
+    r"\b(delete|update|drop|alter|insert|overwrite|remove|erase|truncate)\b",
+    re.IGNORECASE,
+)
+
+
+class DestructiveIntentError(ValueError):
+    pass
+
 
 def get_modules() -> list[ModuleConfig]:
     return [to_api_module_config(module) for module in get_registered_modules()]
@@ -26,6 +37,8 @@ def get_modules() -> list[ModuleConfig]:
 
 def build_mock_answer(request: AskRequest) -> AskResponse:
     validate_question(request.question)
+    validate_safe_question_intent(request.question)
+    settings = refresh_settings()
     module = get_module_config(request.module_id)
     query_agent_result = generate_sql(module.module_id, request.question.strip())
     sql = query_agent_result.sql.strip().rstrip(";")
@@ -42,12 +55,23 @@ def build_mock_answer(request: AskRequest) -> AskResponse:
         explanation=query_agent_result.explanation,
         data=rows,
         module_id=module.module_id,
+        query_agent_mode=settings.query_agent_mode,
     )
 
 
 def validate_question(question: str) -> None:
     if not question.strip():
         raise ValueError("Question cannot be empty.")
+
+
+def validate_safe_question_intent(question: str) -> None:
+    match = DESTRUCTIVE_INTENT_PATTERN.search(question)
+
+    if match:
+        raise DestructiveIntentError(
+            f"Destructive or modifying requests are not allowed: '{match.group(1)}'. "
+            "This app only supports safe read-only analytical questions."
+        )
 
 
 def to_api_module_config(module: RegistryModuleConfig) -> ModuleConfig:
