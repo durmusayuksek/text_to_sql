@@ -9,11 +9,11 @@ Text-to-SQL App is a full-stack analytical prototype.
 - Query engine: DuckDB
 - Local data format: Parquet
 - Module system: registry-driven metadata and processors
-- Current intelligence layer: mocked Query Agent SQL generation and mocked processor responses
+- Current intelligence layer: Query Agent with `mock` and `openai` modes, plus mocked processor responses
 
-The current system accepts a module and a natural-language question, asks the mocked Query Agent for SQL, validates the SQL, executes it against local Parquet files through DuckDB, calls the module processor for a mocked business answer, and returns real queried rows.
+The current system accepts a module and a natural-language question, asks the Query Agent for SQL, validates the SQL, executes it against local Parquet files through DuckDB, calls the module processor for a mocked business answer, and returns real queried rows.
 
-No OpenAI or real LLM logic is connected yet.
+OpenAI mode is available behind `QUERY_AGENT_MODE=openai`. Mock mode remains the default.
 
 ## System Flow
 
@@ -22,7 +22,7 @@ No OpenAI or real LLM logic is connected yet.
 3. The frontend sends `POST /api/ask` with `module_id` and `question`.
 4. The backend validates the module and question.
 5. The Query Agent builds schema context from registry metadata.
-6. The Query Agent returns deterministic mocked SQL and an explanation.
+6. The Query Agent returns SQL and an explanation. In `mock` mode this is deterministic; in `openai` mode this comes from OpenAI and is parsed as JSON.
 7. The DuckDB query runner validates the SQL against module metadata.
 8. The query runner registers all Parquet-backed tables for the selected module.
 9. DuckDB executes the validated SQL.
@@ -36,7 +36,10 @@ No OpenAI or real LLM logic is connected yet.
 
 ## Query Agent Flow
 
-The Query Agent currently uses deterministic mocked SQL generation.
+The Query Agent supports two modes:
+
+- `mock`: deterministic SQL generation with no network calls.
+- `openai`: OpenAI-backed SQL generation using registry metadata only.
 
 A real prompt template exists at `backend/app/prompts/query_agent.md`, and a response parser exists in `backend/app/agents/query_agent.py`. The parser expects JSON with `sql`, `explanation`, `confidence`, and `assumptions`.
 
@@ -50,13 +53,25 @@ The current flow is:
    - relationships
    - example questions
    - example SQL
-3. Return a mocked SQL query and explanation for the selected module.
+3. Return SQL, explanation, confidence, and assumptions.
 4. The query is validated by `sql_validator.py`.
 5. The validated query runs through `query_runner.py`.
 
-The future real SQL Agent must follow the same boundary: it must never receive raw Parquet data.
+OpenAI mode sends only the user question, selected module id, and schema context from `build_agent_schema_context(module_id)`. It must never receive raw Parquet rows.
 
-When a real LLM is connected later, its raw response should pass through `parse_query_agent_response(raw_response)` before validation and execution.
+Every OpenAI raw response passes through `parse_query_agent_response(raw_response)` before validation and execution. Low-confidence responses are rejected before DuckDB execution.
+
+## Environment Modes
+
+The backend reads environment variables with `python-dotenv` in `backend/app/config.py`.
+
+Required values:
+
+- `QUERY_AGENT_MODE`: `mock` or `openai`
+- `OPENAI_API_KEY`: required only when `QUERY_AGENT_MODE=openai`
+- `OPENAI_MODEL`: defaults to `gpt-4.1-mini`
+
+If `QUERY_AGENT_MODE=openai` and `OPENAI_API_KEY` is missing, the backend raises a clear configuration error.
 
 ## SQL Validation Flow
 

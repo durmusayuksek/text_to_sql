@@ -1,10 +1,14 @@
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
+from app.agents import openai_client
+from app.config import get_settings
 from app.modules.registry import build_agent_schema_context, get_module_config
 
 Confidence = Literal["high", "medium", "low"]
+PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "query_agent.md"
 
 
 @dataclass(frozen=True)
@@ -16,14 +20,26 @@ class QueryAgentResult:
     schema_context_used: str
 
 
-class QueryAgentResponseError(ValueError):
+class QueryAgentError(RuntimeError):
+    pass
+
+
+class QueryAgentResponseError(QueryAgentError):
+    pass
+
+
+class QueryAgentLowConfidenceError(QueryAgentError):
     pass
 
 
 def generate_sql(module_id: str, question: str) -> QueryAgentResult:
-    """Generate deterministic mocked SQL from registry metadata only."""
+    """Generate SQL from registry metadata without reading Parquet data."""
+    settings = get_settings()
     schema_context = build_agent_schema_context(module_id)
     module = get_module_config(module_id)
+
+    if settings.query_agent_mode == "openai":
+        return generate_openai_sql(module.module_id, question, schema_context)
 
     return QueryAgentResult(
         sql=get_mock_sql(module.module_id),
@@ -32,6 +48,49 @@ def generate_sql(module_id: str, question: str) -> QueryAgentResult:
         assumptions=[],
         schema_context_used=schema_context,
     )
+
+
+def generate_openai_sql(
+    module_id: str,
+    question: str,
+    schema_context: str,
+) -> QueryAgentResult:
+    raw_response = openai_client.create_chat_completion(
+        build_openai_messages(module_id, question, schema_context)
+    )
+    result = parse_query_agent_response(raw_response, schema_context_used=schema_context)
+
+    if result.confidence == "low":
+        raise QueryAgentLowConfidenceError(
+            "Query Agent returned low confidence SQL. Please rephrase the question or add metadata."
+        )
+
+    return result
+
+
+def build_openai_messages(
+    module_id: str,
+    question: str,
+    schema_context: str,
+) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": load_query_agent_prompt(),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Selected module id: {module_id}\n\n"
+                f"User question:\n{question}\n\n"
+                f"Module schema context:\n{schema_context}"
+            ),
+        },
+    ]
+
+
+def load_query_agent_prompt() -> str:
+    return PROMPT_PATH.read_text(encoding="utf-8")
 
 
 def parse_query_agent_response(

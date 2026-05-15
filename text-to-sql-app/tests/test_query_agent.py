@@ -2,11 +2,14 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.agents.query_agent import (
+    QueryAgentLowConfidenceError,
     QueryAgentResponseError,
     QueryAgentResult,
+    build_openai_messages,
     generate_sql,
     parse_query_agent_response,
 )
+from app.config import ConfigurationError, get_settings
 from app.main import app
 
 
@@ -117,3 +120,89 @@ def test_query_agent_response_missing_sql_fails() -> None:
             }
             """
         )
+
+
+def test_openai_mode_uses_mocked_openai_response(monkeypatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
+
+    captured_messages: list[dict[str, str]] = []
+
+    def fake_create_chat_completion(messages: list[dict[str, str]]) -> str:
+        captured_messages.extend(messages)
+        return """
+        {
+          "sql": "SELECT * FROM qa LIMIT 10",
+          "explanation": "Returns QA rows.",
+          "confidence": "high",
+          "assumptions": []
+        }
+        """
+
+    monkeypatch.setattr(
+        "app.agents.query_agent.openai_client.create_chat_completion",
+        fake_create_chat_completion,
+    )
+
+    result = generate_sql("qa", "Show QA rows")
+
+    assert result.sql == "SELECT * FROM qa LIMIT 10"
+    assert result.confidence == "high"
+    assert result.schema_context_used
+    assert "read_parquet" not in captured_messages[1]["content"]
+    assert "on_time_departure_rate" in captured_messages[1]["content"]
+
+    get_settings.cache_clear()
+
+
+def test_openai_mode_missing_api_key_fails(monkeypatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(ConfigurationError, match="OPENAI_API_KEY is required"):
+        generate_sql("qa", "Show QA rows")
+
+    get_settings.cache_clear()
+
+
+def test_openai_low_confidence_response_fails(monkeypatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    def fake_create_chat_completion(messages: list[dict[str, str]]) -> str:
+        return """
+        {
+          "sql": "SELECT * FROM qa LIMIT 10",
+          "explanation": "Low confidence query.",
+          "confidence": "low",
+          "assumptions": ["Insufficient metadata."]
+        }
+        """
+
+    monkeypatch.setattr(
+        "app.agents.query_agent.openai_client.create_chat_completion",
+        fake_create_chat_completion,
+    )
+
+    with pytest.raises(QueryAgentLowConfidenceError, match="low confidence"):
+        generate_sql("qa", "Show QA rows")
+
+    get_settings.cache_clear()
+
+
+def test_openai_messages_include_only_metadata_context() -> None:
+    messages = build_openai_messages(
+        module_id="qa",
+        question="Show QA rows",
+        schema_context="Module metadata only",
+    )
+
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert "Show QA rows" in messages[1]["content"]
+    assert "Module metadata only" in messages[1]["content"]
+    assert "read_parquet(" not in messages[1]["content"]
