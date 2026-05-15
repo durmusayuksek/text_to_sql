@@ -12,7 +12,4 @@ def process(
     """Return a mocked general QA result until real logic exists."""
     return ProcessorResult(
         answer="This is a mocked business answer for the Questions / Answers module.",
-        sql="SELECT * FROM qa LIMIT 10",
-        explanation="This mocked query returns sample rows for general analysis.",
-        data=[],
     )

@@ -35,9 +35,6 @@ class RelationshipDefinition:
 @dataclass(frozen=True)
 class ProcessorResult:
     answer: str
-    sql: str
-    explanation: str
-    data: list[dict[str, Any]]
 
 
 ProcessorFunction = Callable[

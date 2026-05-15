@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.agents.query_agent import generate_sql
 from app.duckdb_layer.query_runner import run_query
 from app.modules.registry import (
     ModuleConfig as RegistryModuleConfig,
@@ -26,18 +27,19 @@ def get_modules() -> list[ModuleConfig]:
 def build_mock_answer(request: AskRequest) -> AskResponse:
     validate_question(request.question)
     module = get_module_config(request.module_id)
-    result = module.processor_function(
-        data={},
-        question=request.question.strip(),
-        context=build_processor_context(module),
-    )
-    sql = result.sql.strip().rstrip(";")
+    query_agent_result = generate_sql(module.module_id, request.question.strip())
+    sql = query_agent_result.sql.strip().rstrip(";")
     rows = run_query(module.module_id, sql)
+    processor_result = module.processor_function(
+        data={"rows": rows},
+        question=request.question.strip(),
+        context=build_processor_context(module, query_agent_result.schema_context_used),
+    )
 
     return AskResponse(
-        answer=result.answer,
+        answer=processor_result.answer,
         sql=sql,
-        explanation=result.explanation,
+        explanation=query_agent_result.explanation,
         data=rows,
         module_id=module.module_id,
     )
@@ -87,7 +89,10 @@ def to_api_module_config(module: RegistryModuleConfig) -> ModuleConfig:
     )
 
 
-def build_processor_context(module: RegistryModuleConfig) -> dict[str, Any]:
+def build_processor_context(
+    module: RegistryModuleConfig,
+    schema_context_used: str,
+) -> dict[str, Any]:
     return {
         "module_id": module.module_id,
         "label": module.label,
@@ -95,4 +100,5 @@ def build_processor_context(module: RegistryModuleConfig) -> dict[str, Any]:
         "relationships": module.relationships,
         "example_questions": module.example_questions,
         "example_sql": module.example_sql,
+        "schema_context_used": schema_context_used,
     }
