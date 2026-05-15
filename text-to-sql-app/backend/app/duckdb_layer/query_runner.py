@@ -5,11 +5,12 @@ from typing import Any
 import duckdb
 
 from app.duckdb_layer.connection import create_connection
-from app.duckdb_layer.sql_validator import validate_sql
+from app.duckdb_layer.sql_validator import SQLValidationError, validate_sql
 from app.modules.registry import get_module_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+MAX_RETURNED_ROWS = 100
 
 
 class QueryRunnerError(RuntimeError):
@@ -30,7 +31,12 @@ class EmptyQueryResultError(QueryRunnerError):
 
 def run_query(module_id: str, sql: str) -> list[dict[str, Any]]:
     module = get_module_config(module_id)
-    validated_sql = validate_sql(sql)
+    validated_sql = normalize_sql(sql)
+    try:
+        validate_sql(validated_sql, allowed_table_names=[module.table_name])
+    except SQLValidationError as error:
+        raise InvalidQueryError(str(error)) from error
+
     parquet_path = resolve_data_path(module.data_path)
 
     if not parquet_path.exists():
@@ -41,7 +47,7 @@ def run_query(module_id: str, sql: str) -> list[dict[str, Any]]:
     connection = create_connection()
     try:
         register_parquet_view(connection, module.table_name, parquet_path)
-        result = connection.execute(validated_sql)
+        result = connection.execute(limit_query(validated_sql))
         rows = result.fetchall()
         columns = [column[0] for column in result.description]
     except duckdb.Error as error:
@@ -78,3 +84,11 @@ def register_parquet_view(
 def assert_valid_identifier(identifier: str) -> None:
     if not VALID_IDENTIFIER.match(identifier):
         raise InvalidQueryError(f"Invalid DuckDB table identifier: {identifier}")
+
+
+def normalize_sql(sql: str) -> str:
+    return sql.strip().rstrip(";")
+
+
+def limit_query(sql: str) -> str:
+    return f"SELECT * FROM ({sql}) AS validated_query LIMIT {MAX_RETURNED_ROWS}"

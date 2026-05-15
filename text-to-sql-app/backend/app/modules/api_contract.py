@@ -1,7 +1,6 @@
 from typing import Any
 
 from app.duckdb_layer.query_runner import run_query
-from app.duckdb_layer.sql_validator import validate_sql
 from app.modules.registry import (
     ModuleConfig as RegistryModuleConfig,
 )
@@ -25,7 +24,7 @@ def build_mock_answer(request: AskRequest) -> AskResponse:
         question=request.question.strip(),
         context=build_processor_context(module),
     )
-    sql = validate_sql(result.sql)
+    sql = result.sql.strip().rstrip(";")
     rows = run_query(module.module_id, sql)
 
     return AskResponse(
