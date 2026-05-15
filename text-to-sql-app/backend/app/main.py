@@ -20,8 +20,7 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     return HealthResponse(
-        appName=settings.app_name,
+        app_name=settings.app_name,
         status="ok",
         environment=settings.app_env,
     )
-
