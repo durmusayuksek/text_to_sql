@@ -10,19 +10,19 @@ export interface ModuleConfig {
   id: ModuleId;
   title: string;
   description: string;
-  dataFocus: string;
+  data_focus: string;
   accent: "teal" | "indigo" | "amber";
 }
 
 export interface AskRequest {
-  moduleId: ModuleId;
+  module_id: ModuleId;
   question: string;
 }
 
 export interface AskResponse {
-  moduleId: ModuleId;
-  question: string;
-  summary: string;
-  details: string[];
-  generatedAt: string;
+  answer: string;
+  sql: string;
+  explanation: string;
+  data: Array<Record<string, string | number | boolean | null>>;
+  module_id: ModuleId;
 }

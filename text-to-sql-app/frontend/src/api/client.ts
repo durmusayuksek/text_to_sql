@@ -1,4 +1,4 @@
-import type { AskRequest, AskResponse, HealthResponse } from "../types/api";
+import type { AskRequest, AskResponse, HealthResponse, ModuleConfig } from "../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -6,55 +6,60 @@ export async function getHealthStatus(): Promise<HealthResponse> {
   const response = await fetch(`${API_BASE_URL}/health`);
 
   if (!response.ok) {
-    throw new Error("Backend health check failed");
+    throw new Error(await getErrorMessage(response, "Backend health check failed"));
   }
 
   return response.json();
 }
 
-const mockedAnswers: Record<AskRequest["moduleId"], Omit<AskResponse, "question" | "generatedAt">> = {
-  pax_forecast: {
-    moduleId: "pax_forecast",
-    summary:
-      "Passenger demand is expected to remain above the baseline, with the strongest lift coming from weekend departures and shoulder-season bookings.",
-    details: [
-      "Forecast confidence is strongest for near-term sailings where booking pace is already visible.",
-      "Capacity planning should prioritize high-demand departure windows before adding broad inventory changes.",
-      "A useful next query would compare actual pickup against forecast by route and departure month.",
-    ],
-  },
-  special_cruise_profit: {
-    moduleId: "special_cruise_profit",
-    summary:
-      "The mocked profit view suggests a positive contribution margin if entertainment costs stay within the planned budget band.",
-    details: [
-      "Revenue sensitivity is mostly driven by ticket mix, onboard spend, and premium package attachment.",
-      "Cost pressure should be monitored around staffing, artist fees, and venue setup.",
-      "A useful next query would model break-even attendance under conservative spend assumptions.",
-    ],
-  },
-  qa: {
-    moduleId: "qa",
-    summary:
-      "The current answer indicates a clear operational signal, but the final interpretation will depend on the selected dataset and validated SQL path.",
-    details: [
-      "The mocked workflow is ready for module-specific routing without connecting to an LLM yet.",
-      "Future responses should include the validated SQL, source tables, and confidence notes.",
-      "A useful next query would ask for a ranked comparison with a specific date range.",
-    ],
-  },
-};
+export async function getModules(): Promise<ModuleConfig[]> {
+  const response = await fetch(`${API_BASE_URL}/api/modules`);
 
-export async function askQuestion(request: AskRequest): Promise<AskResponse> {
-  await new Promise((resolve) => window.setTimeout(resolve, 900));
-
-  if (request.question.toLowerCase().includes("error")) {
-    throw new Error("Mocked request failed. Try a different question.");
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Unable to load modules"));
   }
 
-  return {
-    ...mockedAnswers[request.moduleId],
-    question: request.question,
-    generatedAt: new Date().toISOString(),
-  };
+  return response.json();
+}
+
+export async function askQuestion(request: AskRequest): Promise<AskResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/ask`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, "Unable to generate answer"));
+  }
+
+  return response.json();
+}
+
+async function getErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = (await response.json()) as { detail?: unknown };
+
+    if (typeof payload.detail === "string") {
+      return payload.detail;
+    }
+
+    if (Array.isArray(payload.detail)) {
+      return payload.detail
+        .map((item) => {
+          if (typeof item === "object" && item !== null && "msg" in item) {
+            return String(item.msg);
+          }
+
+          return String(item);
+        })
+        .join(" ");
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
 }

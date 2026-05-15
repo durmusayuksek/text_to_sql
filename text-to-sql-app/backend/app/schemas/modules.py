@@ -2,12 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-
-ModuleName = Literal["pax_forecast", "special_cruise_profit", "qa"]
+from app.schemas.api import ModuleId
 
 
 class ModuleDefinition(BaseModel):
-    name: ModuleName
+    name: ModuleId
     display_name: str
     description: str
-

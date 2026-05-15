@@ -1,8 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.schemas.api import HealthResponse
+from app.modules.api_contract import UnknownModuleError, build_mock_answer, get_modules
+from app.schemas.api import AskRequest, AskResponse, HealthResponse, ModuleConfig
 
 settings = get_settings()
 
@@ -10,7 +11,7 @@ app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=[settings.frontend_origin, "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,3 +25,18 @@ async def health_check() -> HealthResponse:
         status="ok",
         environment=settings.app_env,
     )
+
+
+@app.get("/api/modules", response_model=list[ModuleConfig])
+async def list_modules() -> list[ModuleConfig]:
+    return get_modules()
+
+
+@app.post("/api/ask", response_model=AskResponse)
+async def ask_question(request: AskRequest) -> AskResponse:
+    try:
+        return build_mock_answer(request)
+    except UnknownModuleError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error

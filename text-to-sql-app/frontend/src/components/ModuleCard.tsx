@@ -25,7 +25,7 @@ export function ModuleCard({ module, selected, onSelect }: ModuleCardProps) {
       <span
         className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${accentClasses[module.accent]}`}
       >
-        {module.dataFocus}
+        {module.data_focus}
       </span>
       <span className="mt-4 text-lg font-semibold leading-6 text-slate-950">
         {module.title}
