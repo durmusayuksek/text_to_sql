@@ -6,12 +6,19 @@ export interface HealthResponse {
 
 export type ModuleId = "pax_forecast" | "special_cruise_profit" | "qa";
 
-export interface ModuleConfig {
-  id: ModuleId;
-  title: string;
+export interface TableDefinition {
+  name: string;
   description: string;
-  data_focus: string;
-  accent: "teal" | "indigo" | "amber";
+  columns: string[];
+}
+
+export interface ModuleConfig {
+  module_id: ModuleId;
+  label: string;
+  description: string;
+  data_path: string;
+  table_definitions: TableDefinition[];
+  example_questions: string[];
 }
 
 export interface AskRequest {

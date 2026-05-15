@@ -1,68 +1,66 @@
+from typing import Any
+
 from app.duckdb_layer.sql_validator import validate_sql
-from app.schemas.api import AskRequest, AskResponse, ModuleConfig, ModuleId
-
-
-MODULES: tuple[ModuleConfig, ...] = (
-    ModuleConfig(
-        id="pax_forecast",
-        title="Pax Forecast",
-        description="Ask forecasting questions about demand, occupancy, and passenger volume trends.",
-        data_focus="Forecasting",
-        accent="teal",
-    ),
-    ModuleConfig(
-        id="special_cruise_profit",
-        title="Special Cruise / Entertainment Profit Calculation",
-        description="Explore revenue, cost, margin, and profitability scenarios for special cruise events.",
-        data_focus="Profit analysis",
-        accent="indigo",
-    ),
-    ModuleConfig(
-        id="qa",
-        title="Questions / Answers",
-        description="Use a general analytical workspace for direct questions over prepared datasets.",
-        data_focus="Operations Q&A",
-        accent="amber",
-    ),
+from app.modules.registry import (
+    ModuleConfig as RegistryModuleConfig,
 )
-
-
-class UnknownModuleError(ValueError):
-    pass
+from app.modules.registry import (
+    UnknownModuleError,
+    get_module_config,
+    get_registered_modules,
+)
+from app.schemas.api import AskRequest, AskResponse, ModuleConfig, TableDefinition
 
 
 def get_modules() -> list[ModuleConfig]:
-    return list(MODULES)
+    return [to_api_module_config(module) for module in get_registered_modules()]
 
 
 def build_mock_answer(request: AskRequest) -> AskResponse:
-    module_id = validate_module_id(request.module_id)
     validate_question(request.question)
-    sql = validate_sql("SELECT * FROM sample_table LIMIT 10")
-
-    return AskResponse(
-        answer="This is a mocked business answer for the selected module.",
-        sql=sql,
-        explanation="This mocked query returns sample rows.",
-        data=[
-            {"metric": "sample_revenue", "value": 125000, "unit": "SEK"},
-            {"metric": "sample_margin", "value": 0.32, "unit": "ratio"},
-            {"metric": "sample_rows", "value": 10, "unit": "count"},
-        ],
-        module_id=module_id,
+    module = get_module_config(request.module_id)
+    result = module.processor_function(
+        data={},
+        question=request.question.strip(),
+        context=build_processor_context(module),
     )
 
-
-def validate_module_id(module_id: str) -> ModuleId:
-    valid_module_ids = {module.id for module in MODULES}
-
-    if module_id not in valid_module_ids:
-        valid_values = ", ".join(sorted(valid_module_ids))
-        raise UnknownModuleError(f"Unknown module_id '{module_id}'. Expected one of: {valid_values}.")
-
-    return module_id  # type: ignore[return-value]
+    return AskResponse(
+        answer=result.answer,
+        sql=validate_sql(result.sql),
+        explanation=result.explanation,
+        data=result.data,
+        module_id=module.module_id,
+    )
 
 
 def validate_question(question: str) -> None:
     if not question.strip():
         raise ValueError("Question cannot be empty.")
+
+
+def to_api_module_config(module: RegistryModuleConfig) -> ModuleConfig:
+    return ModuleConfig(
+        module_id=module.module_id,
+        label=module.label,
+        description=module.description,
+        data_path=module.data_path,
+        table_definitions=[
+            TableDefinition(
+                name=table.name,
+                description=table.description,
+                columns=list(table.columns),
+            )
+            for table in module.table_definitions
+        ],
+        example_questions=list(module.example_questions),
+    )
+
+
+def build_processor_context(module: RegistryModuleConfig) -> dict[str, Any]:
+    return {
+        "module_id": module.module_id,
+        "label": module.label,
+        "table_definitions": module.table_definitions,
+        "example_questions": module.example_questions,
+    }

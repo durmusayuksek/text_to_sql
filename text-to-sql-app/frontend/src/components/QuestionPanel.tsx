@@ -31,7 +31,7 @@ export function QuestionPanel({
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium text-slate-500">Selected module</p>
         <h2 id="question-panel-heading" className="text-2xl font-semibold text-slate-950">
-          {module.title}
+          {module.label}
         </h2>
       </div>
 

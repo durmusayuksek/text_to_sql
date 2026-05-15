@@ -27,9 +27,9 @@ export function ModuleSelector({
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         {modules.map((module) => (
           <ModuleCard
-            key={module.id}
+            key={module.module_id}
             module={module}
-            selected={module.id === selectedModuleId}
+            selected={module.module_id === selectedModuleId}
             onSelect={onSelect}
           />
         ))}

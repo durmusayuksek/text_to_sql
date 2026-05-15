@@ -19,7 +19,7 @@ export function App() {
   const [moduleError, setModuleError] = useState<string | null>(null);
 
   const selectedModule = useMemo(
-    () => modules.find((module) => module.id === selectedModuleId) ?? modules[0] ?? null,
+    () => modules.find((module) => module.module_id === selectedModuleId) ?? modules[0] ?? null,
     [modules, selectedModuleId],
   );
 
@@ -35,7 +35,7 @@ export function App() {
 
         if (isMounted) {
           setModules(loadedModules);
-          setSelectedModuleId(loadedModules[0]?.id ?? "pax_forecast");
+          setSelectedModuleId(loadedModules[0]?.module_id ?? "pax_forecast");
           setModuleLoadState("success");
         }
       } catch (caughtError) {
@@ -83,7 +83,7 @@ export function App() {
     try {
       const [response] = await Promise.all([
         askQuestion({
-          module_id: selectedModule.id,
+          module_id: selectedModule.module_id,
           question: trimmedQuestion,
         }),
         waitForMinimumLoadingState(),
@@ -154,7 +154,7 @@ export function App() {
 
         <ModuleSelector
           modules={modules}
-          selectedModuleId={selectedModule?.id ?? selectedModuleId}
+          selectedModuleId={selectedModule?.module_id ?? selectedModuleId}
           onSelect={handleModuleSelect}
         />
 

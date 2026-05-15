@@ -10,15 +10,21 @@ class HealthResponse(BaseModel):
 
 
 ModuleId = Literal["pax_forecast", "special_cruise_profit", "qa"]
-ModuleAccent = Literal["teal", "indigo", "amber"]
+
+
+class TableDefinition(BaseModel):
+    name: str
+    description: str
+    columns: list[str]
 
 
 class ModuleConfig(BaseModel):
-    id: ModuleId
-    title: str
+    module_id: ModuleId
+    label: str
     description: str
-    data_focus: str
-    accent: ModuleAccent
+    data_path: str
+    table_definitions: list[TableDefinition]
+    example_questions: list[str]
 
 
 class AskRequest(BaseModel):
