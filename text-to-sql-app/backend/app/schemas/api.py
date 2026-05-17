@@ -13,9 +13,25 @@ class AskRequest(BaseModel):
     question: str
 
 
+class GeneratedSqlQuery(BaseModel):
+    query_id: str
+    purpose: str
+    sql: str
+
+
+class QueryResult(BaseModel):
+    query_id: str
+    purpose: str
+    sql: str
+    rows: list[dict[str, Any]]
+
+
 class AskResponse(BaseModel):
     answer: str
-    sql: str
-    explanation: str
-    data: list[dict[str, Any]]
+    key_findings: list[str]
+    assumptions: list[str]
+    limitations: list[str]
+    confidence: Literal["high", "medium", "low"]
+    generated_sql_queries: list[GeneratedSqlQuery]
+    query_results: list[QueryResult] | None = None
     query_agent_mode: Literal["mock", "openai"]

@@ -6,7 +6,19 @@ This file defines project rules for Codex and future contributors.
 
 This project is now a single Question & Answer Text-to-SQL application.
 
-Users ask natural-language business questions. The backend asks the Query Agent to generate DuckDB SQL from central catalog metadata, validates the SQL, runs it through DuckDB over local Parquet files, and returns the result.
+Users ask natural-language business questions. The backend runs a controlled pipeline:
+
+```text
+User Question
+-> Analysis Planner
+-> Query Agent
+-> SQL Validator
+-> DuckDB Query Runner
+-> Response Agent
+-> Final Answer
+```
+
+Agents never execute SQL directly. The backend remains responsible for validation and DuckDB execution.
 
 Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer active frontend or backend modules. Their sample Parquet files may remain available as catalog tables, but they are data sources, not selectable modules.
 
@@ -29,6 +41,8 @@ Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer
 - SQL validation belongs in `backend/app/duckdb_layer/sql_validator.py`.
 - Local analytical data lives under `data/` as Parquet files.
 - Query Agent prompts must receive catalog metadata only, never full Parquet data.
+- Analysis Planner prompts must receive catalog metadata only, never full Parquet data.
+- Response Agent prompts may receive validated query results for answer writing, but must not generate or execute SQL.
 - Keep both `mock` and `openai` Query Agent modes.
 
 ## SQL Safety Rules
@@ -67,4 +81,4 @@ Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer
 - Use async FastAPI endpoints.
 - Keep validation errors clear and user-readable.
 - Keep DuckDB-specific concerns inside `backend/app/duckdb_layer`.
-- Keep Query Agent logic in `backend/app/agents`.
+- Keep Analysis Planner, Query Agent, and Response Agent logic in `backend/app/agents`.

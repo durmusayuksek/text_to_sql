@@ -2,7 +2,7 @@
 
 This guide explains how to replace development sample Parquet files or add new real business Parquet files.
 
-The app now uses one central data catalog for a single Question & Answer Text-to-SQL workflow. Do not add raw data directly to prompts or agent context. The Query Agent receives metadata only.
+The app now uses one central data catalog for a single Question & Answer Text-to-SQL workflow. Do not add raw data directly to planner or query prompts. The Analysis Planner and Query Agent receive metadata only.
 
 ## Where Real Data Goes
 
@@ -168,7 +168,7 @@ JOIN pax_route_targets rt ON pf.route = rt.route
 LIMIT 10;
 ```
 
-The query should run through `run_query(sql)`, not by bypassing the application query runner.
+The query should run through `run_query(sql)` or `run_queries([...])`, not by bypassing the application query runner.
 
 ## Confirm SQL Validator Scope
 
@@ -181,7 +181,7 @@ The validator should allow only tables listed in the central data catalog.
 
 ## Agent Safety Note
 
-Allowed Query Agent context:
+Allowed Analysis Planner and Query Agent context:
 
 - catalog description
 - table names
@@ -194,11 +194,11 @@ Allowed Query Agent context:
 - example questions
 - example SQL
 
-Not allowed in Query Agent context:
+Not allowed in Analysis Planner or Query Agent context:
 
 - full Parquet rows
 - sensitive raw values
 - unrestricted file paths
 - direct access instructions for `read_parquet()`
 
-Use `build_catalog_context()` as the source of Query Agent schema context.
+Use `build_catalog_context()` as the source of planner and Query Agent schema context. The Response Agent may receive validated, limited query results for answer writing, but it must not receive unrestricted Parquet rows or execute SQL.

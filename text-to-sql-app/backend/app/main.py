@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.agents.openai_client import OpenAIClientError, OpenAIClientTimeoutError
+from app.agents.analysis_planner import AnalysisPlannerResponseError
 from app.agents.query_agent import QueryAgentLowConfidenceError, QueryAgentResponseError
+from app.agents.response_agent import ResponseAgentResponseError
 from app.config import ConfigurationError, get_settings
 from app.duckdb_layer.query_runner import (
     EmptyQueryResultError,
@@ -50,6 +52,10 @@ async def ask_question(request: AskRequest) -> AskResponse:
     except QueryAgentLowConfidenceError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except QueryAgentResponseError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except AnalysisPlannerResponseError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except ResponseAgentResponseError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except OpenAIClientTimeoutError as error:
         raise HTTPException(status_code=504, detail=str(error)) from error

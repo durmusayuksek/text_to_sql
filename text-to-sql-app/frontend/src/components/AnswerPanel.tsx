@@ -41,43 +41,95 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
 
       <p className="mt-5 text-base leading-7 text-slate-800">{answer.answer}</p>
 
-      <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Generated SQL
-        </p>
-        <pre className="mt-3 overflow-x-auto text-sm leading-6 text-slate-800">
-          <code>{answer.sql}</code>
-        </pre>
-      </div>
+      {answer.key_findings.length > 0 ? (
+        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Key findings
+          </p>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-800">
+            {answer.key_findings.map((finding) => (
+              <li key={finding}>{finding}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-      <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Explanation
-        </p>
-        <p className="mt-2 text-sm leading-6 text-slate-700">{answer.explanation}</p>
-      </div>
+      {answer.assumptions.length > 0 ? (
+        <InfoList title="Assumptions" items={answer.assumptions} />
+      ) : null}
 
-      <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Sample data
-        </p>
-        <div className="mt-3 space-y-2">
-          {answer.data.map((row, index) => (
-            <div
-              key={`result-row-${index}`}
-              className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-            >
-              {Object.entries(row)
-                .map(([key, value]) => `${key}: ${String(value)}`)
-                .join(" | ")}
+      {answer.limitations.length > 0 ? (
+        <InfoList title="Limitations" items={answer.limitations} />
+      ) : null}
+
+      <details className="mt-5 rounded-md border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Debug
+        </summary>
+        <div className="mt-4 space-y-4">
+          {answer.generated_sql_queries.map((query) => (
+            <div key={query.query_id} className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">{query.query_id}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{query.purpose}</p>
+              <pre className="mt-3 overflow-x-auto text-sm leading-6 text-slate-800">
+                <code>{query.sql}</code>
+              </pre>
             </div>
           ))}
+
+          {answer.query_results ? (
+            <div className="space-y-3">
+              {answer.query_results.map((result) => (
+                <div key={result.query_id} className="rounded-md border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Rows for {result.query_id}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {result.rows.map((row, index) => (
+                      <div
+                        key={`${result.query_id}-row-${index}`}
+                        className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                      >
+                        {Object.entries(row)
+                          .map(([key, value]) => `${key}: ${String(value)}`)
+                          .join(" | ")}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-slate-500">
+              Raw rows are hidden. Enable backend debug query results to include them.
+            </p>
+          )}
         </div>
-      </div>
+      </details>
 
       <div className="mt-5 border-t border-slate-200 pt-4 text-xs text-slate-500">
-        Query Agent mode: {answer.query_agent_mode}.
+        Agent mode: {answer.query_agent_mode}. Confidence: {answer.confidence}.
       </div>
     </section>
+  );
+}
+
+interface InfoListProps {
+  title: string;
+  items: string[];
+}
+
+function InfoList({ title, items }: InfoListProps) {
+  return (
+    <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </p>
+      <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

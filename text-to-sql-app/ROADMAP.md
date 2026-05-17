@@ -17,14 +17,18 @@
 - Added Query Agent `mock` and `openai` modes.
 - Simplified the product to one Question & Answer workflow.
 - Removed selectable frontend modules and module-specific processors.
+- Added controlled Analysis Planner -> Query Agent -> Validator -> DuckDB -> Response Agent pipeline.
+- Added multi-query SQL generation and execution support.
 
 ## Current State
 
 - Frontend asks one natural-language question and renders loading, error, empty, and response states.
 - `/api/ask` accepts only `{ "question": "..." }`.
-- Query Agent uses central catalog metadata only.
+- Analysis Planner and Query Agent use central catalog metadata only.
+- Response Agent formats validated query results into a final answer.
 - DuckDB returns real rows from local Parquet files.
 - SQL is validated before execution.
+- `/api/ask` can hide raw query results unless `DEBUG_QUERY_RESULTS=true`.
 - Mock mode is deterministic and remains the default.
 - OpenAI mode is available behind `QUERY_AGENT_MODE=openai`.
 
@@ -39,7 +43,7 @@
 
 ## Future Planned Features
 
-- Connect a richer Response Agent for business-friendly answer generation.
+- Improve Response Agent answer quality and result summarization.
 - Add more Parquet-backed catalog tables.
 - Add schema/catalog versioning.
 - Add query result pagination.

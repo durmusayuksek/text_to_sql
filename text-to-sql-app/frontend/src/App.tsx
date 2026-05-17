@@ -59,8 +59,8 @@ export function App() {
                 Ask business questions in natural language.
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
-                The Query Agent generates DuckDB SQL from catalog metadata, the
-                validator checks it, and DuckDB runs it against local Parquet data.
+                A controlled planner, Query Agent, validator, DuckDB runner, and
+                Response Agent turn catalog metadata into a business answer.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
@@ -69,8 +69,8 @@ export function App() {
                 <p className="text-xs font-medium text-slate-500">Workflow</p>
               </div>
               <div className="min-w-20">
-                <p className="text-2xl font-semibold text-slate-950">SQL</p>
-                <p className="text-xs font-medium text-slate-500">Validated</p>
+                <p className="text-2xl font-semibold text-slate-950">5</p>
+                <p className="text-xs font-medium text-slate-500">Stages</p>
               </div>
               <div className="min-w-20">
                 <p className="text-2xl font-semibold text-slate-950">DuckDB</p>

@@ -1,9 +1,10 @@
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from app.agents import openai_client
+from app.agents.analysis_planner import AnalysisPlannerResult
 from app.catalog import build_catalog_context
 from app.config import get_settings
 
@@ -12,9 +13,15 @@ PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "query_agent.md"
 
 
 @dataclass(frozen=True)
-class QueryAgentResult:
+class GeneratedQuery:
+    query_id: str
+    purpose: str
     sql: str
-    explanation: str
+
+
+@dataclass(frozen=True)
+class QueryAgentResult:
+    queries: list[GeneratedQuery]
     confidence: Confidence
     assumptions: list[str]
     schema_context_used: str
@@ -32,17 +39,22 @@ class QueryAgentLowConfidenceError(QueryAgentError):
     pass
 
 
-def generate_sql(question: str) -> QueryAgentResult:
+def generate_sql(question: str, plan: AnalysisPlannerResult) -> QueryAgentResult:
     """Generate SQL from catalog metadata without reading Parquet data."""
     settings = get_settings()
     schema_context = build_catalog_context()
 
     if settings.query_agent_mode == "openai":
-        return generate_openai_sql(question, schema_context)
+        return generate_openai_sql(question, plan, schema_context)
 
     return QueryAgentResult(
-        sql=get_mock_sql(question),
-        explanation="This mocked query returns sample rows from the central data catalog.",
+        queries=[
+            GeneratedQuery(
+                query_id="main",
+                purpose=get_mock_query_purpose(plan),
+                sql=get_mock_sql(question),
+            )
+        ],
         confidence="high",
         assumptions=[],
         schema_context_used=schema_context,
@@ -51,10 +63,11 @@ def generate_sql(question: str) -> QueryAgentResult:
 
 def generate_openai_sql(
     question: str,
+    plan: AnalysisPlannerResult,
     schema_context: str,
 ) -> QueryAgentResult:
     raw_response = openai_client.create_chat_completion(
-        build_openai_messages(question, schema_context)
+        build_openai_messages(question, plan, schema_context)
     )
     result = parse_query_agent_response(raw_response, schema_context_used=schema_context)
 
@@ -68,6 +81,7 @@ def generate_openai_sql(
 
 def build_openai_messages(
     question: str,
+    plan: AnalysisPlannerResult,
     schema_context: str,
 ) -> list[dict[str, str]]:
     return [
@@ -79,6 +93,8 @@ def build_openai_messages(
             "role": "user",
             "content": (
                 f"User question:\n{question}\n\n"
+                "Analysis Planner output:\n"
+                f"{json.dumps(plan.to_prompt_payload(), indent=2)}\n\n"
                 f"Data catalog metadata:\n{schema_context}"
             ),
         },
@@ -101,17 +117,12 @@ def parse_query_agent_response(
     if not isinstance(payload, dict):
         raise QueryAgentResponseError("Query Agent response must be a JSON object.")
 
-    sql = require_string(payload, "sql")
-    if not sql.strip():
-        raise QueryAgentResponseError("Query Agent response is missing sql.")
-
-    explanation = require_string(payload, "explanation")
+    queries = require_queries(payload)
     confidence = require_confidence(payload)
     assumptions = require_assumptions(payload)
 
     return QueryAgentResult(
-        sql=sql.strip(),
-        explanation=explanation.strip(),
+        queries=queries,
         confidence=confidence,
         assumptions=assumptions,
         schema_context_used=schema_context_used,
@@ -152,6 +163,46 @@ def require_assumptions(payload: dict[str, Any]) -> list[str]:
     return value
 
 
+def require_queries(payload: dict[str, Any]) -> list[GeneratedQuery]:
+    value = payload.get("queries")
+
+    if not isinstance(value, list) or not value:
+        raise QueryAgentResponseError(
+            "Query Agent response field 'queries' must be a non-empty list."
+        )
+
+    queries: list[GeneratedQuery] = []
+    seen_query_ids: set[str] = set()
+
+    for item in value:
+        if not isinstance(item, dict):
+            raise QueryAgentResponseError("Each query must be a JSON object.")
+
+        query_id = require_string(item, "query_id").strip()
+        purpose = require_string(item, "purpose").strip()
+        sql = require_string(item, "sql").strip()
+
+        if not query_id or not purpose or not sql:
+            raise QueryAgentResponseError(
+                "Each query must include non-empty query_id, purpose, and sql fields."
+            )
+
+        if query_id in seen_query_ids:
+            raise QueryAgentResponseError(f"Duplicate query_id '{query_id}' is not allowed.")
+
+        seen_query_ids.add(query_id)
+        queries.append(GeneratedQuery(query_id=query_id, purpose=purpose, sql=sql))
+
+    return queries
+
+
+def get_mock_query_purpose(plan: AnalysisPlannerResult) -> str:
+    if plan.analysis_steps:
+        return plan.analysis_steps[0]
+
+    return "Answer the user question from the central data catalog."
+
+
 def get_mock_sql(question: str) -> str:
     lowered_question = question.lower()
 
@@ -173,3 +224,11 @@ def get_mock_sql(question: str) -> str:
         )
 
     return "SELECT * FROM qa LIMIT 10"
+
+
+def query_agent_result_to_dict(result: QueryAgentResult) -> dict[str, Any]:
+    return {
+        "queries": [asdict(query) for query in result.queries],
+        "assumptions": result.assumptions,
+        "confidence": result.confidence,
+    }

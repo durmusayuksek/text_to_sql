@@ -1,5 +1,10 @@
 from app.catalog import build_catalog_context
-from app.duckdb_layer.query_runner import InvalidQueryError, run_query
+from app.duckdb_layer.query_runner import (
+    InvalidQueryError,
+    QueryExecutionRequest,
+    run_queries,
+    run_query,
+)
 
 
 def test_catalog_join_query_can_use_multiple_registered_tables() -> None:
@@ -21,6 +26,28 @@ def test_query_runner_blocks_tables_outside_catalog() -> None:
         run_query("SELECT * FROM unknown_table LIMIT 10")
     except InvalidQueryError as error:
         assert "Table 'unknown_table' is not allowed" in str(error)
+    else:
+        raise AssertionError("Expected InvalidQueryError")
+
+
+def test_run_queries_validates_each_query() -> None:
+    try:
+        run_queries(
+            [
+                QueryExecutionRequest(
+                    query_id="safe",
+                    purpose="Return QA rows.",
+                    sql="SELECT * FROM qa LIMIT 1",
+                ),
+                QueryExecutionRequest(
+                    query_id="unsafe",
+                    purpose="Attempt to read files.",
+                    sql="SELECT * FROM read_parquet('data/qa/qa.parquet')",
+                ),
+            ]
+        )
+    except InvalidQueryError as error:
+        assert "read_parquet" in str(error)
     else:
         raise AssertionError("Expected InvalidQueryError")
 

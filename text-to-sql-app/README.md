@@ -21,6 +21,14 @@ text-to-sql-app/
 
 The central data catalog lives in `backend/app/catalog.py`. API routes should stay thin, and every executable SQL query must go through `backend/app/duckdb_layer/sql_validator.py`.
 
+The `/api/ask` flow is controlled and linear:
+
+```text
+User Question -> Analysis Planner -> Query Agent -> SQL Validator -> DuckDB Query Runner -> Response Agent -> Final Answer
+```
+
+Agents do not execute SQL. The backend validates and runs every generated query.
+
 ## Environment
 
 Copy `.env.example` to `.env` and adjust values locally.
@@ -33,6 +41,11 @@ Query Agent modes:
 
 - `QUERY_AGENT_MODE=mock`: default mode. Uses deterministic mocked SQL and does not call OpenAI.
 - `QUERY_AGENT_MODE=openai`: uses OpenAI to generate SQL from catalog metadata only.
+
+Debug responses:
+
+- `DEBUG_QUERY_RESULTS=false`: default. API responses include generated SQL, but hide raw rows.
+- `DEBUG_QUERY_RESULTS=true`: include limited query rows in `/api/ask` responses for debugging.
 
 Required OpenAI settings for `openai` mode:
 

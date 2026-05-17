@@ -23,6 +23,23 @@ def _get_int_env(name: str, default: int) -> int:
         raise ConfigurationError(f"{name} must be an integer.") from exc
 
 
+def _get_bool_env(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().lower()
+
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    raise ConfigurationError(f"{name} must be a boolean.")
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "Text to SQL App"
@@ -33,6 +50,7 @@ class Settings:
     query_agent_mode: str = "mock"  # "mock" or "openai"
     openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: int = 30
+    debug_query_results: bool = False
 
 
 @lru_cache
@@ -56,6 +74,10 @@ def get_settings() -> Settings:
         openai_timeout_seconds=_get_int_env(
             "OPENAI_TIMEOUT_SECONDS",
             30,
+        ),
+        debug_query_results=_get_bool_env(
+            "DEBUG_QUERY_RESULTS",
+            False,
         ),
     )
 

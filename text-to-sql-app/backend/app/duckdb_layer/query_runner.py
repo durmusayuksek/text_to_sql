@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,29 @@ from app.duckdb_layer.sql_validator import SQLValidationError, validate_sql
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MAX_RETURNED_ROWS = 100
+
+
+@dataclass(frozen=True)
+class QueryExecutionRequest:
+    query_id: str
+    purpose: str
+    sql: str
+
+
+@dataclass(frozen=True)
+class QueryExecutionResult:
+    query_id: str
+    purpose: str
+    sql: str
+    rows: list[dict[str, Any]]
+
+    def to_response_payload(self) -> dict[str, Any]:
+        return {
+            "query_id": self.query_id,
+            "purpose": self.purpose,
+            "sql": self.sql,
+            "rows": self.rows,
+        }
 
 
 class QueryRunnerError(RuntimeError):
@@ -30,13 +54,43 @@ class EmptyQueryResultError(QueryRunnerError):
 
 
 def run_query(sql: str) -> list[dict[str, Any]]:
+    result = run_queries(
+        [
+            QueryExecutionRequest(
+                query_id="main",
+                purpose="Execute a single validated SQL query.",
+                sql=sql,
+            )
+        ]
+    )[0]
+
+    return result.rows
+
+
+def run_queries(queries: list[QueryExecutionRequest]) -> list[QueryExecutionResult]:
+    if not queries:
+        raise InvalidQueryError("At least one query is required.")
+
     catalog = get_data_catalog()
-    validated_sql = normalize_sql(sql)
     allowed_table_names = get_allowed_table_names()
-    try:
-        validate_sql(validated_sql, allowed_table_names=allowed_table_names)
-    except SQLValidationError as error:
-        raise InvalidQueryError(str(error)) from error
+    validated_queries: list[QueryExecutionRequest] = []
+
+    for query in queries:
+        validated_sql = normalize_sql(query.sql)
+        try:
+            validate_sql(validated_sql, allowed_table_names=allowed_table_names)
+        except SQLValidationError as error:
+            raise InvalidQueryError(
+                f"Invalid SQL for query '{query.query_id}': {error}"
+            ) from error
+
+        validated_queries.append(
+            QueryExecutionRequest(
+                query_id=query.query_id,
+                purpose=query.purpose,
+                sql=validated_sql,
+            )
+        )
 
     for table in catalog.tables:
         assert_valid_identifier(table.table_name)
@@ -54,18 +108,32 @@ def run_query(sql: str) -> list[dict[str, Any]]:
                 table.table_name,
                 resolve_data_path(table.data_path),
             )
-        result = connection.execute(limit_query(validated_sql))
-        rows = result.fetchall()
-        columns = [column[0] for column in result.description]
+        query_results = []
+        for query in validated_queries:
+            result = connection.execute(limit_query(query.sql))
+            rows = result.fetchall()
+            columns = [column[0] for column in result.description]
+            mapped_rows = [dict(zip(columns, row, strict=True)) for row in rows]
+
+            if not mapped_rows:
+                raise EmptyQueryResultError(
+                    f"Query '{query.query_id}' returned no rows."
+                )
+
+            query_results.append(
+                QueryExecutionResult(
+                    query_id=query.query_id,
+                    purpose=query.purpose,
+                    sql=query.sql,
+                    rows=mapped_rows,
+                )
+            )
     except duckdb.Error as error:
         raise InvalidQueryError(f"Invalid SQL for data catalog: {error}") from error
     finally:
         connection.close()
 
-    if not rows:
-        raise EmptyQueryResultError("Query returned no rows.")
-
-    return [dict(zip(columns, row, strict=True)) for row in rows]
+    return query_results
 
 
 def resolve_data_path(data_path: str) -> Path:
