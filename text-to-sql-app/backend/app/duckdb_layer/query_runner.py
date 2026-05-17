@@ -4,9 +4,9 @@ from typing import Any
 
 import duckdb
 
+from app.catalog import get_allowed_table_names, get_data_catalog
 from app.duckdb_layer.connection import create_connection
 from app.duckdb_layer.sql_validator import SQLValidationError, validate_sql
-from app.modules.registry import get_module_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -29,26 +29,26 @@ class EmptyQueryResultError(QueryRunnerError):
     pass
 
 
-def run_query(module_id: str, sql: str) -> list[dict[str, Any]]:
-    module = get_module_config(module_id)
+def run_query(sql: str) -> list[dict[str, Any]]:
+    catalog = get_data_catalog()
     validated_sql = normalize_sql(sql)
-    allowed_table_names = [table.table_name for table in module.tables]
+    allowed_table_names = get_allowed_table_names()
     try:
         validate_sql(validated_sql, allowed_table_names=allowed_table_names)
     except SQLValidationError as error:
         raise InvalidQueryError(str(error)) from error
 
-    for table in module.tables:
+    for table in catalog.tables:
         assert_valid_identifier(table.table_name)
         parquet_path = resolve_data_path(table.data_path)
         if not parquet_path.exists():
             raise MissingDataFileError(
-                f"Parquet file not found for module '{module_id}': {table.data_path}"
+                f"Parquet file not found for catalog table '{table.table_name}': {table.data_path}"
             )
 
     connection = create_connection()
     try:
-        for table in module.tables:
+        for table in catalog.tables:
             register_parquet_view(
                 connection,
                 table.table_name,
@@ -58,12 +58,12 @@ def run_query(module_id: str, sql: str) -> list[dict[str, Any]]:
         rows = result.fetchall()
         columns = [column[0] for column in result.description]
     except duckdb.Error as error:
-        raise InvalidQueryError(f"Invalid SQL for module '{module_id}': {error}") from error
+        raise InvalidQueryError(f"Invalid SQL for data catalog: {error}") from error
     finally:
         connection.close()
 
     if not rows:
-        raise EmptyQueryResultError(f"Query returned no rows for module '{module_id}'.")
+        raise EmptyQueryResultError("Query returned no rows.")
 
     return [dict(zip(columns, row, strict=True)) for row in rows]
 

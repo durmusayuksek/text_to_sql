@@ -9,13 +9,11 @@ from app.duckdb_layer.query_runner import (
     InvalidQueryError,
     MissingDataFileError,
 )
-from app.modules.api_contract import (
+from app.ask_service import (
     DestructiveIntentError,
-    UnknownModuleError,
-    build_mock_answer,
-    get_modules,
+    answer_question,
 )
-from app.schemas.api import AskRequest, AskResponse, HealthResponse, ModuleConfig
+from app.schemas.api import AskRequest, AskResponse, HealthResponse
 
 settings = get_settings()
 
@@ -39,15 +37,10 @@ async def health_check() -> HealthResponse:
     )
 
 
-@app.get("/api/modules", response_model=list[ModuleConfig])
-async def list_modules() -> list[ModuleConfig]:
-    return get_modules()
-
-
 @app.post("/api/ask", response_model=AskResponse)
 async def ask_question(request: AskRequest) -> AskResponse:
     try:
-        return build_mock_answer(request)
+        return answer_question(request)
     except MissingDataFileError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     except EmptyQueryResultError as error:
@@ -65,8 +58,6 @@ async def ask_question(request: AskRequest) -> AskResponse:
     except ConfigurationError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     except DestructiveIntentError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except UnknownModuleError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

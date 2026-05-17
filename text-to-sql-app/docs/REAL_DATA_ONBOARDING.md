@@ -1,21 +1,12 @@
 # Real Data Onboarding
 
-This guide explains how to replace development sample Parquet files with real business Parquet files later.
+This guide explains how to replace development sample Parquet files or add new real business Parquet files.
 
-The current app already supports:
-
-- module registry metadata
-- multiple Parquet-backed tables per module
-- table relationships
-- column metadata
-- SQL validation
-- DuckDB query execution
-
-Do not add raw data directly to prompts or agent context. Future SQL Agent context must be built from metadata only.
+The app now uses one central data catalog for a single Question & Answer Text-to-SQL workflow. Do not add raw data directly to prompts or agent context. The Query Agent receives metadata only.
 
 ## Where Real Data Goes
 
-Store real Parquet files under the existing `data/` structure:
+Store real Parquet files under `data/` using stable, descriptive paths:
 
 ```text
 data/
@@ -24,20 +15,11 @@ data/
 `-- qa/
 ```
 
-Use stable, descriptive file names:
+Existing Pax Forecast and Special Cruise files are no longer active modules. They may remain as catalog data sources. New data sources can use new folders under `data/`.
 
-```text
-data/pax_forecast/pax_forecast.parquet
-data/pax_forecast/pax_route_targets.parquet
-data/special_cruise/special_cruise_profit.parquet
-data/qa/qa.parquet
-```
+## Required Catalog Metadata
 
-When replacing sample files, keep table names stable when possible. If a table name changes, update the module registry and any example SQL that references it.
-
-## Required Registry Metadata
-
-Every real table must be represented in `backend/app/modules/registry.py`.
+Every table that SQL may query must be represented in `backend/app/catalog.py`.
 
 Each table needs:
 
@@ -46,23 +28,19 @@ Each table needs:
 - `description`
 - column metadata
 
-Each module needs:
+The catalog also supports:
 
-- `module_id`
-- `label`
-- `description`
-- `tables`
-- `relationships`
-- `example_questions`
-- `example_sql`
+- relationships
+- example questions
+- example SQL
 
 Relationships should be added whenever SQL may need to join tables.
 
 ## Table Metadata Checklist
 
-Complete this checklist before adding a real table to the registry.
+Complete this checklist before adding a real table to the catalog.
 
-### Identity
+## Identity
 
 - What does one row represent?
 - What is the grain of the table?
@@ -70,7 +48,7 @@ Complete this checklist before adding a real table to the registry.
 - Is the primary key unique?
 - Is the table an event table, snapshot table, dimension table, or aggregate table?
 
-### Columns
+## Columns
 
 - Which columns are dates?
 - Which columns are measures?
@@ -81,15 +59,14 @@ Complete this checklist before adding a real table to the registry.
 - Which columns have common aliases or business terms?
 - Which columns have useful example values?
 
-### Joins
+## Joins
 
 - Which columns can be joined to other tables?
 - Are join keys unique on one side or many-to-many?
 - What is the relationship type?
-- Are joins based on exact keys, dates, route names, event IDs, or other business identifiers?
 - Are there known join caveats?
 
-### Data Quality
+## Data Quality
 
 - Are there duplicate rows?
 - Are there missing values in important columns?
@@ -98,24 +75,14 @@ Complete this checklist before adding a real table to the registry.
 - Are currencies consistent?
 - Are percentages represented as `0.32` or `32`?
 
-### Sensitivity
+## Sensitivity
 
 - Are there sensitive columns?
 - Are there personal data columns?
 - Are there columns that should never be exposed to agents or users?
-- Should sensitive columns be excluded from Parquet files or omitted from registry metadata?
-
-### Business Definitions
-
-- Are key metrics defined clearly?
-- Are formulas documented?
-- Are units documented?
-- Are filters or exclusions documented?
-- Is there an owner who can confirm the definition?
+- Should sensitive columns be excluded from Parquet files or omitted from catalog metadata?
 
 ## Example Metadata Profile
-
-Example table metadata for a real Pax Forecast table:
 
 ```python
 TableDefinition(
@@ -131,31 +98,15 @@ TableDefinition(
             business_terms=("sailing date", "departure"),
         ),
         ColumnDefinition(
-            name="route",
-            type="VARCHAR",
-            description="Commercial route for the sailing.",
-            examples=("Stockholm-Tallinn",),
-            business_terms=("line", "route"),
-        ),
-        ColumnDefinition(
             name="forecast_pax",
             type="INTEGER",
             description="Forecasted passenger count.",
             examples=("1840",),
             business_terms=("pax", "passengers", "demand"),
         ),
-        ColumnDefinition(
-            name="capacity",
-            type="INTEGER",
-            description="Available passenger capacity.",
-            examples=("2100",),
-            business_terms=("inventory", "capacity"),
-        ),
     ),
 )
 ```
-
-Example relationship metadata:
 
 ```python
 RelationshipDefinition(
@@ -168,73 +119,47 @@ RelationshipDefinition(
 )
 ```
 
-Example questions:
-
-```python
-example_questions=(
-    "Which routes are forecast to exceed target load factor next month?",
-    "Show forecasted passenger volume by route and departure week.",
-)
-```
-
-Example SQL:
-
-```python
-example_sql=(
-    "SELECT * FROM pax_forecast LIMIT 10",
-    "SELECT pf.route, pf.forecast_pax, rt.target_load_factor FROM pax_forecast pf JOIN pax_route_targets rt ON pf.route = rt.route LIMIT 10",
-)
-```
-
 ## Replacing Sample Parquet Files
 
-1. Place the real Parquet file in the correct `data/<module>/` folder.
+1. Place the real Parquet file under `data/`.
 2. Confirm the file name and table name you want the app to use.
-3. Update the module registry `data_path`.
+3. Update the table `data_path` in `backend/app/catalog.py`.
 4. Update column metadata to match the real file.
 5. Add or update relationships.
 6. Update example questions.
 7. Update example SQL.
 8. Run validation checks.
-9. Test `/api/ask` for the affected module.
+9. Test `/api/ask` with representative questions.
 
 ## Validating Real Data
 
-Before using a real Parquet file, confirm these items.
-
-### File Exists
-
-Check that the file path in the registry exists:
+Check that the file path in the catalog exists:
 
 ```powershell
 Get-ChildItem data\pax_forecast\pax_forecast.parquet
 ```
 
-### DuckDB Can Read It
-
-Run a simple DuckDB read:
+Confirm DuckDB can read it:
 
 ```powershell
 C:\Users\durmuyu\AppData\Local\anaconda3\python.exe -c "import duckdb; print(duckdb.sql(\"SELECT * FROM read_parquet('data/pax_forecast/pax_forecast.parquet') LIMIT 5\").fetchall())"
 ```
 
-### Confirm Row Count
+Confirm row count:
 
 ```sql
 SELECT COUNT(*) FROM read_parquet('data/pax_forecast/pax_forecast.parquet');
 ```
 
-### Confirm Column Names
+Confirm column names:
 
 ```sql
 DESCRIBE SELECT * FROM read_parquet('data/pax_forecast/pax_forecast.parquet');
 ```
 
-Compare the real column names to the registry metadata.
+Compare real column names to catalog metadata.
 
-### Confirm Joins Work
-
-Use the registered table names in module example SQL:
+Use app-level table names in example SQL:
 
 ```sql
 SELECT pf.route, pf.forecast_pax, rt.target_load_factor
@@ -243,25 +168,22 @@ JOIN pax_route_targets rt ON pf.route = rt.route
 LIMIT 10;
 ```
 
-The query should run through `run_query(module_id, sql)`, not by bypassing the application query runner.
+The query should run through `run_query(sql)`, not by bypassing the application query runner.
 
-### Confirm SQL Validator Scope
+## Confirm SQL Validator Scope
 
-For each module:
+- Queries against catalog tables should pass.
+- Queries against unknown tables should fail.
+- File-reading functions such as `read_parquet()` should fail when used in user SQL.
+- Destructive or modifying statements should fail.
 
-- queries against registered module tables should pass
-- queries against tables from another module should fail
-- file-reading functions such as `read_parquet()` should fail when used in user SQL
-
-The validator should allow only tables listed in the selected module metadata.
+The validator should allow only tables listed in the central data catalog.
 
 ## Agent Safety Note
 
-The SQL Agent must only receive metadata, never full raw data.
+Allowed Query Agent context:
 
-Allowed future agent context:
-
-- module description
+- catalog description
 - table names
 - column names
 - column types
@@ -272,12 +194,11 @@ Allowed future agent context:
 - example questions
 - example SQL
 
-Not allowed in future agent context:
+Not allowed in Query Agent context:
 
 - full Parquet rows
 - sensitive raw values
 - unrestricted file paths
 - direct access instructions for `read_parquet()`
 
-Use `build_agent_schema_context(module_id)` as the future source of SQL Agent schema context.
-
+Use `build_catalog_context()` as the source of Query Agent schema context.

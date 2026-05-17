@@ -1,12 +1,13 @@
 # Text to SQL App
 
-A clean full-stack starter for a text-to-SQL application.
+A clean full-stack starter for a single Question & Answer text-to-SQL application.
 
 ## Stack
 
 - Frontend: React, TypeScript, Vite, Tailwind CSS
 - Backend: FastAPI
-- Data layer placeholder: DuckDB
+- Query engine: DuckDB
+- Local data format: Parquet
 
 ## Project Structure
 
@@ -18,7 +19,7 @@ text-to-sql-app/
 `-- tests/
 ```
 
-Business logic belongs in `backend/app/modules`. API routes should stay thin, and SQL generation or validation must go through `backend/app/duckdb_layer/sql_validator.py`.
+The central data catalog lives in `backend/app/catalog.py`. API routes should stay thin, and every executable SQL query must go through `backend/app/duckdb_layer/sql_validator.py`.
 
 ## Environment
 
@@ -31,7 +32,7 @@ cp .env.example .env
 Query Agent modes:
 
 - `QUERY_AGENT_MODE=mock`: default mode. Uses deterministic mocked SQL and does not call OpenAI.
-- `QUERY_AGENT_MODE=openai`: uses OpenAI to generate SQL from registry metadata only.
+- `QUERY_AGENT_MODE=openai`: uses OpenAI to generate SQL from catalog metadata only.
 
 Required OpenAI settings for `openai` mode:
 

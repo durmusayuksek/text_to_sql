@@ -2,70 +2,59 @@
 
 ## Overview
 
-Text-to-SQL App is a full-stack analytical prototype.
+Text-to-SQL App is a single Question & Answer analytical prototype.
 
 - Frontend: React, TypeScript, Vite, Tailwind CSS
 - Backend: FastAPI
 - Query engine: DuckDB
 - Local data format: Parquet
-- Module system: registry-driven metadata and processors
-- Current intelligence layer: Query Agent with `mock` and `openai` modes, plus mocked processor responses
+- Metadata source: central data catalog
+- Intelligence layer: Query Agent with `mock` and `openai` modes
 
-The current system accepts a module and a natural-language question, asks the Query Agent for SQL, validates the SQL, executes it against local Parquet files through DuckDB, calls the module processor for a mocked business answer, and returns real queried rows.
+The app accepts a natural-language question, asks the Query Agent for DuckDB SQL, validates the SQL, executes it against catalog-backed Parquet files through DuckDB, and returns an answer, SQL explanation, and result rows.
 
-OpenAI mode is available behind `QUERY_AGENT_MODE=openai`. Mock mode remains the default.
+Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer active modules. Their sample datasets can remain in the catalog as ordinary analytical tables.
 
 ## System Flow
 
-1. The frontend loads modules from `GET /api/modules`.
-2. The user selects a module and submits a question.
-3. The frontend sends `POST /api/ask` with `module_id` and `question`.
-4. The backend validates the module and question.
-5. The Query Agent builds schema context from registry metadata.
-6. The Query Agent returns SQL and an explanation. In `mock` mode this is deterministic; in `openai` mode this comes from OpenAI and is parsed as JSON.
-7. The DuckDB query runner validates the SQL against module metadata.
-8. The query runner registers all Parquet-backed tables for the selected module.
-9. DuckDB executes the validated SQL.
-10. The module processor returns a mocked business answer.
-11. The API returns:
-   - mocked answer
-   - SQL
+1. The user enters a business question in the frontend.
+2. The frontend sends `POST /api/ask` with `{ "question": "..." }`.
+3. The backend validates the question and blocks destructive intent.
+4. The Query Agent builds context from `backend/app/catalog.py`.
+5. The Query Agent returns JSON with `sql`, `explanation`, `confidence`, and `assumptions`.
+6. The DuckDB query runner validates SQL against catalog table names.
+7. The query runner registers catalog Parquet files as DuckDB views.
+8. DuckDB executes the validated SQL with maximum row protection.
+9. The API returns:
+   - answer
+   - generated SQL
    - explanation
-   - real query rows
-   - module id
+   - result rows
+   - Query Agent mode
 
 ## Query Agent Flow
 
 The Query Agent supports two modes:
 
 - `mock`: deterministic SQL generation with no network calls.
-- `openai`: OpenAI-backed SQL generation using registry metadata only.
+- `openai`: OpenAI-backed SQL generation using catalog metadata only.
 
-A real prompt template exists at `backend/app/prompts/query_agent.md`, and a response parser exists in `backend/app/agents/query_agent.py`. The parser expects JSON with `sql`, `explanation`, `confidence`, and `assumptions`.
+The prompt template is `backend/app/prompts/query_agent.md`. The parser in `backend/app/agents/query_agent.py` expects JSON:
 
-The current flow is:
+```json
+{
+  "sql": "SELECT * FROM qa LIMIT 10",
+  "explanation": "Briefly explain what the query does.",
+  "confidence": "high | medium | low",
+  "assumptions": []
+}
+```
 
-1. Build module schema context with `build_agent_schema_context(module_id)`.
-2. Use only metadata from the registry:
-   - module description
-   - table names
-   - column names, types, descriptions, examples, and business terms
-   - relationships
-   - example questions
-   - example SQL
-3. Return SQL, explanation, confidence, and assumptions.
-4. The query is validated by `sql_validator.py`.
-5. The validated query runs through `query_runner.py`.
-
-OpenAI mode sends only the user question, selected module id, and schema context from `build_agent_schema_context(module_id)`. It must never receive raw Parquet rows.
-
-Every OpenAI raw response passes through `parse_query_agent_response(raw_response)` before validation and execution. Low-confidence responses are rejected before DuckDB execution.
+OpenAI mode sends only the user question and catalog metadata. It must never receive raw Parquet rows. Low-confidence responses are rejected before DuckDB execution.
 
 ## Environment Modes
 
 The backend reads environment variables with `python-dotenv` in `backend/app/config.py`.
-
-Required values:
 
 - `QUERY_AGENT_MODE`: `mock` or `openai`
 - `OPENAI_API_KEY`: required only when `QUERY_AGENT_MODE=openai`
@@ -85,45 +74,32 @@ The validator uses `sqlglot` and enforces:
 - no destructive or modifying statements
 - no direct file-reading functions
 - no network or external file access
-- no table access outside the selected module metadata
+- no table access outside the central data catalog
 
 `query_runner.py` applies the validator before DuckDB execution and wraps the validated query with an outer maximum `LIMIT`.
 
 ## DuckDB And Parquet Setup
 
-Local data is stored under `data/`:
+Local data is stored under `data/`. Each catalog table points to a Parquet file. The query runner:
 
-```text
-data/
-|-- pax_forecast/
-|-- special_cruise/
-`-- qa/
-```
-
-Each registry table points to a Parquet file. The query runner:
-
-1. Looks up the selected module.
-2. Resolves each table `data_path`.
-3. Registers each Parquet file as a DuckDB view using `read_parquet()`.
-4. Executes the validated SQL.
-5. Returns rows as `list[dict]`.
+1. Resolves each table `data_path`.
+2. Registers each Parquet file as a DuckDB view using trusted internal `read_parquet()`.
+3. Executes the validated SQL.
+4. Returns rows as `list[dict]`.
 
 Direct user SQL cannot call `read_parquet()`. Only the trusted query runner uses it internally.
 
-## Module Registry
+## Data Catalog
 
-The module registry lives in `backend/app/modules/registry.py`.
+The central data catalog lives in `backend/app/catalog.py`.
 
-Each module defines:
+It defines:
 
-- `module_id`
-- `label`
-- `description`
-- `tables`
-- `relationships`
-- `processor_function`
-- `example_questions`
-- `example_sql`
+- catalog description
+- tables
+- relationships
+- example questions
+- example SQL
 
 Each table defines:
 
@@ -140,41 +116,10 @@ Each column defines:
 - optional `examples`
 - optional `business_terms`
 
-Relationships describe join paths between tables. Pax Forecast currently proves the multi-table design with:
+Relationships describe join paths between tables. This keeps the architecture extensible for future data sources without reintroducing selectable modules.
 
-- `pax_forecast`
-- `pax_route_targets`
+## Response Formatting
 
-## Processor Flow
+There is no Response Agent yet. The current backend returns a minimal answer string plus the generated SQL, explanation, and result rows.
 
-Processors live in `backend/app/modules`.
-
-Each processor exposes:
-
-```python
-process(data, question, context)
-```
-
-Processors currently return mocked:
-
-- answer
-
-The Query Agent owns SQL and SQL explanation. The API fills the final `data` field with real DuckDB query results.
-
-## Future Response Agent Flow
-
-The Response Agent is not implemented yet.
-
-The intended future flow is:
-
-1. Query Agent generates SQL from module metadata.
-2. SQL validator approves or rejects the SQL.
-3. DuckDB returns result rows.
-4. Response Agent receives:
-   - original question
-   - module metadata summary
-   - validated SQL
-   - query result rows
-5. Response Agent writes a business-friendly answer.
-
-The Response Agent should explain results clearly and avoid inventing data not present in the query output.
+A future Response Agent may be added later, but it should receive only the original question, validated SQL, catalog summaries, and query result rows needed for formatting.

@@ -1,8 +1,6 @@
 import type { FormEvent } from "react";
-import type { ModuleConfig } from "../types/api";
 
 interface QuestionPanelProps {
-  module: ModuleConfig;
   question: string;
   error: string | null;
   isSubmitting: boolean;
@@ -11,7 +9,6 @@ interface QuestionPanelProps {
 }
 
 export function QuestionPanel({
-  module,
   question,
   error,
   isSubmitting,
@@ -29,9 +26,9 @@ export function QuestionPanel({
       aria-labelledby="question-panel-heading"
     >
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-slate-500">Selected module</p>
+        <p className="text-sm font-medium text-slate-500">Question & Answer</p>
         <h2 id="question-panel-heading" className="text-2xl font-semibold text-slate-950">
-          {module.label}
+          Ask a business question
         </h2>
       </div>
 
@@ -42,7 +39,7 @@ export function QuestionPanel({
         <textarea
           id="question"
           className="mt-2 min-h-36 w-full resize-y rounded-lg border border-slate-300 bg-white px-4 py-3 text-base leading-7 text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900"
-          placeholder="Example: Which sailings are forecast to exceed capacity targets next month?"
+          placeholder="Example: What was passenger volume last month?"
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
         />
@@ -61,9 +58,7 @@ export function QuestionPanel({
           >
             {isSubmitting ? "Generating answer..." : "Submit question"}
           </button>
-          <p className="text-sm text-slate-500">
-            Mocked API behavior is active for this version.
-          </p>
+          <p className="text-sm text-slate-500">SQL is generated, validated, and run through DuckDB.</p>
         </div>
       </form>
     </section>

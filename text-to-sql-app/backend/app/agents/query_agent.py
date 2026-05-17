@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.agents import openai_client
+from app.catalog import build_catalog_context
 from app.config import get_settings
-from app.modules.registry import build_agent_schema_context, get_module_config
 
 Confidence = Literal["high", "medium", "low"]
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "query_agent.md"
@@ -32,18 +32,17 @@ class QueryAgentLowConfidenceError(QueryAgentError):
     pass
 
 
-def generate_sql(module_id: str, question: str) -> QueryAgentResult:
-    """Generate SQL from registry metadata without reading Parquet data."""
+def generate_sql(question: str) -> QueryAgentResult:
+    """Generate SQL from catalog metadata without reading Parquet data."""
     settings = get_settings()
-    schema_context = build_agent_schema_context(module_id)
-    module = get_module_config(module_id)
+    schema_context = build_catalog_context()
 
     if settings.query_agent_mode == "openai":
-        return generate_openai_sql(module.module_id, question, schema_context)
+        return generate_openai_sql(question, schema_context)
 
     return QueryAgentResult(
-        sql=get_mock_sql(module.module_id),
-        explanation=get_mock_explanation(module.module_id),
+        sql=get_mock_sql(question),
+        explanation="This mocked query returns sample rows from the central data catalog.",
         confidence="high",
         assumptions=[],
         schema_context_used=schema_context,
@@ -51,12 +50,11 @@ def generate_sql(module_id: str, question: str) -> QueryAgentResult:
 
 
 def generate_openai_sql(
-    module_id: str,
     question: str,
     schema_context: str,
 ) -> QueryAgentResult:
     raw_response = openai_client.create_chat_completion(
-        build_openai_messages(module_id, question, schema_context)
+        build_openai_messages(question, schema_context)
     )
     result = parse_query_agent_response(raw_response, schema_context_used=schema_context)
 
@@ -69,7 +67,6 @@ def generate_openai_sql(
 
 
 def build_openai_messages(
-    module_id: str,
     question: str,
     schema_context: str,
 ) -> list[dict[str, str]]:
@@ -81,9 +78,8 @@ def build_openai_messages(
         {
             "role": "user",
             "content": (
-                f"Selected module id: {module_id}\n\n"
                 f"User question:\n{question}\n\n"
-                f"Module schema context:\n{schema_context}"
+                f"Data catalog metadata:\n{schema_context}"
             ),
         },
     ]
@@ -156,33 +152,24 @@ def require_assumptions(payload: dict[str, Any]) -> list[str]:
     return value
 
 
-def get_mock_sql(module_id: str) -> str:
-    mocked_sql_by_module = {
-        "pax_forecast": (
-            "SELECT pf.departure_date, pf.route, pf.forecast_pax, pf.capacity, "
-            "pf.load_factor, rt.target_load_factor, rt.priority "
-            "FROM pax_forecast pf "
-            "JOIN pax_route_targets rt ON pf.route = rt.route "
+def get_mock_sql(question: str) -> str:
+    lowered_question = question.lower()
+
+    if "passenger" in lowered_question or "pax" in lowered_question:
+        return (
+            "SELECT route, SUM(forecast_pax) AS forecast_passengers "
+            "FROM pax_forecast "
+            "GROUP BY route "
+            "ORDER BY forecast_passengers DESC "
             "LIMIT 10"
-        ),
-        "special_cruise_profit": "SELECT * FROM special_cruise_profit LIMIT 10",
-        "qa": "SELECT * FROM qa LIMIT 10",
-    }
+        )
 
-    try:
-        return mocked_sql_by_module[module_id]
-    except KeyError as error:
-        raise ValueError(f"No mocked SQL is configured for module_id '{module_id}'.") from error
+    if "margin" in lowered_question or "profit" in lowered_question:
+        return (
+            "SELECT event_name, ticket_revenue, entertainment_cost, margin "
+            "FROM special_cruise_profit "
+            "ORDER BY margin DESC "
+            "LIMIT 10"
+        )
 
-
-def get_mock_explanation(module_id: str) -> str:
-    mocked_explanations_by_module = {
-        "pax_forecast": "This mocked query joins forecast rows to route-level target metadata.",
-        "special_cruise_profit": "This mocked query returns sample rows for entertainment profit analysis.",
-        "qa": "This mocked query returns sample rows for general analysis.",
-    }
-
-    try:
-        return mocked_explanations_by_module[module_id]
-    except KeyError as error:
-        raise ValueError(f"No mocked SQL explanation is configured for module_id '{module_id}'.") from error
+    return "SELECT * FROM qa LIMIT 10"

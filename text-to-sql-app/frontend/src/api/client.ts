@@ -1,4 +1,4 @@
-import type { AskRequest, AskResponse, HealthResponse, ModuleConfig } from "../types/api";
+import type { AskRequest, AskResponse, HealthResponse } from "../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -7,16 +7,6 @@ export async function getHealthStatus(): Promise<HealthResponse> {
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, "Backend health check failed"));
-  }
-
-  return response.json();
-}
-
-export async function getModules(): Promise<ModuleConfig[]> {
-  const response = await fetch(`${API_BASE_URL}/api/modules`);
-
-  if (!response.ok) {
-    throw new Error(await getErrorMessage(response, "Unable to load modules"));
   }
 
   return response.json();

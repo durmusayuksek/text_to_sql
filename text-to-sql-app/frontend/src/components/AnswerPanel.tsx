@@ -22,7 +22,7 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
   if (!answer) {
     return (
       <section className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-sm leading-6 text-slate-500">
-        Your mocked answer will appear here after submitting a question.
+        Your answer will appear here after submitting a question.
       </section>
     );
   }
@@ -33,7 +33,7 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
       aria-labelledby="answer-panel-heading"
     >
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-slate-500">Mocked response</p>
+        <p className="text-sm font-medium text-slate-500">Response</p>
         <h2 id="answer-panel-heading" className="text-xl font-semibold text-slate-950">
           Business answer
         </h2>
@@ -43,7 +43,7 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
 
       <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Mocked SQL
+          Generated SQL
         </p>
         <pre className="mt-3 overflow-x-auto text-sm leading-6 text-slate-800">
           <code>{answer.sql}</code>
@@ -64,7 +64,7 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
         <div className="mt-3 space-y-2">
           {answer.data.map((row, index) => (
             <div
-              key={`${answer.module_id}-${index}`}
+              key={`result-row-${index}`}
               className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
             >
               {Object.entries(row)
@@ -76,7 +76,7 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
       </div>
 
       <div className="mt-5 border-t border-slate-200 pt-4 text-xs text-slate-500">
-        Response served by the mocked backend contract for {answer.module_id}.
+        Query Agent mode: {answer.query_agent_mode}.
       </div>
     </section>
   );
