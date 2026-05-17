@@ -91,6 +91,9 @@ The backend reads environment variables with `python-dotenv` in `backend/app/con
 - `OPENAI_API_KEY`: required only when `AGENT_MODE=openai`
 - `OPENAI_MODEL`: defaults to `gpt-4.1-mini`
 - `RESPONSE_AGENT_MAX_SAMPLE_ROWS`: defaults to `5`
+- `ENABLE_ASK_EVENT_LOGGING`: defaults to `true` in development
+- `ASK_EVENT_LOG_PATH`: defaults to `logs/ask_events.jsonl`
+- `LOG_QUERY_RESULT_ROWS`: defaults to `false`
 
 If `AGENT_MODE=openai` and `OPENAI_API_KEY` is missing, the backend raises a clear configuration error.
 
@@ -179,3 +182,24 @@ It returns JSON with:
 ```
 
 Raw query rows are included in `/api/ask` responses only when `DEBUG_QUERY_RESULTS=true`. This API debug flag is separate from Response Agent minimization.
+
+## Ask Event Logging
+
+`/api/ask` writes one best-effort JSONL event per request when `ENABLE_ASK_EVENT_LOGGING=true`.
+
+Each event includes:
+
+- request id and UTC timestamp
+- user question
+- agent mode
+- planner output
+- Query Agent output
+- validated queries
+- query result summaries
+- Response Agent output
+- final answer, findings, assumptions, limitations, warnings, and errors
+- latency and success flag
+
+Query result summaries include query id, purpose, SQL, row count, columns, and warnings. Raw rows are omitted unless `LOG_QUERY_RESULT_ROWS=true`.
+
+Logging failures are swallowed so they do not break the API. Logs help improve prompts, SQL quality, catalog metadata, and safety behavior over time.

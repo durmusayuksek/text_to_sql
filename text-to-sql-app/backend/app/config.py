@@ -53,6 +53,9 @@ class Settings:
     openai_timeout_seconds: int = 30
     debug_query_results: bool = False
     response_agent_max_sample_rows: int = 5
+    enable_ask_event_logging: bool = True
+    ask_event_log_path: str = "logs/ask_events.jsonl"
+    log_query_result_rows: bool = False
 
     def __post_init__(self) -> None:
         mode = (self.agent_mode or self.query_agent_mode or "mock").lower()
@@ -62,9 +65,10 @@ class Settings:
 
 @lru_cache
 def get_settings() -> Settings:
+    app_env = os.getenv("APP_ENV", "development")
     settings = Settings(
         app_name=os.getenv("APP_NAME", "Text to SQL App"),
-        app_env=os.getenv("APP_ENV", "development"),
+        app_env=app_env,
         frontend_origin=os.getenv(
             "FRONTEND_ORIGIN",
             "http://localhost:5173",
@@ -90,6 +94,18 @@ def get_settings() -> Settings:
         response_agent_max_sample_rows=_get_int_env(
             "RESPONSE_AGENT_MAX_SAMPLE_ROWS",
             5,
+        ),
+        enable_ask_event_logging=_get_bool_env(
+            "ENABLE_ASK_EVENT_LOGGING",
+            app_env == "development",
+        ),
+        ask_event_log_path=os.getenv(
+            "ASK_EVENT_LOG_PATH",
+            "logs/ask_events.jsonl",
+        ),
+        log_query_result_rows=_get_bool_env(
+            "LOG_QUERY_RESULT_ROWS",
+            False,
         ),
     )
 

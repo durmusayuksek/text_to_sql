@@ -45,6 +45,7 @@ Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer
 - Response Agent prompts may receive validated query results for answer writing, but must not generate or execute SQL.
 - In OpenAI mode, Response Agent prompts should receive minimized query result summaries, not full raw row dumps.
 - Catalog `sensitive` and `redaction_strategy` metadata must be applied before any row samples or numeric summaries are sent to OpenAI.
+- Ask event logs must not include raw query rows unless `LOG_QUERY_RESULT_ROWS=true`.
 - Keep both `mock` and `openai` Query Agent modes.
 
 ## SQL Safety Rules

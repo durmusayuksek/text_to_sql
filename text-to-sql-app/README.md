@@ -51,6 +51,15 @@ Debug responses:
 - `DEBUG_QUERY_RESULTS=true`: include limited query rows in `/api/ask` responses for debugging.
 - `RESPONSE_AGENT_MAX_SAMPLE_ROWS=5`: controls how many sample rows the Response Agent can receive in OpenAI mode.
 
+Ask event logging:
+
+- `ENABLE_ASK_EVENT_LOGGING=true`: append one JSON object per `/api/ask` request in development.
+- `ASK_EVENT_LOG_PATH=logs/ask_events.jsonl`: local JSONL log path.
+- `LOG_QUERY_RESULT_ROWS=false`: default. Logs query metadata and row counts, but not raw rows.
+- `LOG_QUERY_RESULT_ROWS=true`: include raw query rows in logs for local debugging only.
+
+The ask event log is useful for reviewing question wording, planner output, generated SQL, warnings, errors, latency, and final answers when improving prompts and catalog metadata.
+
 Required OpenAI settings for `openai` mode:
 
 ```text
@@ -58,6 +67,9 @@ OPENAI_API_KEY=
 AGENT_MODE=mock
 OPENAI_MODEL=gpt-4.1-mini
 RESPONSE_AGENT_MAX_SAMPLE_ROWS=5
+ENABLE_ASK_EVENT_LOGGING=true
+ASK_EVENT_LOG_PATH=logs/ask_events.jsonl
+LOG_QUERY_RESULT_ROWS=false
 ```
 
 Do not commit `.env`. It is ignored by git.

@@ -24,6 +24,7 @@ class QueryResult(BaseModel):
     purpose: str
     sql: str
     rows: list[dict[str, Any]]
+    columns: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 

@@ -27,6 +27,7 @@ class QueryExecutionResult:
     purpose: str
     sql: str
     rows: list[dict[str, Any]]
+    columns: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def to_response_payload(self) -> dict[str, Any]:
@@ -35,6 +36,7 @@ class QueryExecutionResult:
             "purpose": self.purpose,
             "sql": self.sql,
             "rows": self.rows,
+            "columns": self.columns,
             "warnings": self.warnings,
         }
 
@@ -127,6 +129,7 @@ def run_queries(queries: list[QueryExecutionRequest]) -> list[QueryExecutionResu
                     purpose=query.purpose,
                     sql=query.sql,
                     rows=mapped_rows,
+                    columns=columns,
                     warnings=warnings,
                 )
             )

@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 import pytest
 
@@ -472,7 +474,7 @@ def test_api_ask_accepts_question_without_module_id(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "app.ask_service.refresh_settings",
-        lambda: Settings(query_agent_mode="mock"),
+        lambda: Settings(query_agent_mode="mock", enable_ask_event_logging=False),
     )
 
     client = TestClient(app)
@@ -492,7 +494,11 @@ def test_api_ask_includes_query_results_when_debug_enabled(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "app.ask_service.refresh_settings",
-        lambda: Settings(query_agent_mode="mock", debug_query_results=True),
+        lambda: Settings(
+            query_agent_mode="mock",
+            debug_query_results=True,
+            enable_ask_event_logging=False,
+        ),
     )
 
     client = TestClient(app)
@@ -545,6 +551,132 @@ def test_empty_query_result_creates_response_limitation() -> None:
     assert response.limitations == ["Query 'empty' returned no rows."]
 
 
+def test_successful_api_request_writes_one_jsonl_event(monkeypatch, tmp_path) -> None:
+    from app.config import Settings
+
+    log_path = tmp_path / "ask_events.jsonl"
+    monkeypatch.setattr(
+        "app.ask_service.refresh_settings",
+        lambda: Settings(
+            query_agent_mode="mock",
+            enable_ask_event_logging=True,
+            ask_event_log_path=str(log_path),
+            log_query_result_rows=False,
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/ask", json={"question": "Show one row"})
+
+    assert response.status_code == 200
+    events = read_jsonl(log_path)
+    assert len(events) == 1
+    event = events[0]
+    assert event["success"] is True
+    assert event["user_question"] == "Show one row"
+    assert event["planner_output"]
+    assert event["query_agent_output"]["queries"]
+    assert event["validated_queries"]
+    assert event["query_result_summaries"]
+    assert event["response_agent_output"]
+    assert event["final_answer"]
+    assert isinstance(event["latency_ms"], float)
+    assert "rows" not in event["query_result_summaries"][0]
+
+
+def test_failed_api_request_writes_unsuccessful_jsonl_event(monkeypatch, tmp_path) -> None:
+    from app.config import Settings
+
+    log_path = tmp_path / "ask_events.jsonl"
+    monkeypatch.setattr(
+        "app.ask_service.refresh_settings",
+        lambda: Settings(
+            query_agent_mode="mock",
+            enable_ask_event_logging=True,
+            ask_event_log_path=str(log_path),
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/ask", json={"question": "Drop the qa table"})
+
+    assert response.status_code == 400
+    events = read_jsonl(log_path)
+    assert len(events) == 1
+    assert events[0]["success"] is False
+    assert events[0]["errors"][0]["type"] == "DestructiveIntentError"
+
+
+def test_query_rows_are_not_logged_when_disabled(monkeypatch, tmp_path) -> None:
+    from app.config import Settings
+
+    log_path = tmp_path / "ask_events.jsonl"
+    monkeypatch.setattr(
+        "app.ask_service.refresh_settings",
+        lambda: Settings(
+            query_agent_mode="mock",
+            enable_ask_event_logging=True,
+            ask_event_log_path=str(log_path),
+            log_query_result_rows=False,
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/ask", json={"question": "Show one row"})
+
+    assert response.status_code == 200
+    event = read_jsonl(log_path)[0]
+    assert "rows" not in event["query_result_summaries"][0]
+
+
+def test_query_rows_are_logged_only_when_enabled(monkeypatch, tmp_path) -> None:
+    from app.config import Settings
+
+    log_path = tmp_path / "ask_events.jsonl"
+    monkeypatch.setattr(
+        "app.ask_service.refresh_settings",
+        lambda: Settings(
+            query_agent_mode="mock",
+            enable_ask_event_logging=True,
+            ask_event_log_path=str(log_path),
+            log_query_result_rows=True,
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/ask", json={"question": "Show one row"})
+
+    assert response.status_code == 200
+    event = read_jsonl(log_path)[0]
+    assert event["query_result_summaries"][0]["rows"]
+
+
+def test_logging_failure_does_not_break_api(monkeypatch) -> None:
+    from app.config import Settings
+
+    monkeypatch.setattr(
+        "app.ask_service.refresh_settings",
+        lambda: Settings(
+            query_agent_mode="mock",
+            enable_ask_event_logging=True,
+            ask_event_log_path="logs/ask_events.jsonl",
+        ),
+    )
+
+    def fail_resolve_log_path(configured_path: str):
+        raise OSError("logging failed")
+
+    monkeypatch.setattr(
+        "app.ask_event_logger.resolve_log_path",
+        fail_resolve_log_path,
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/ask", json={"question": "Show one row"})
+
+    assert response.status_code == 200
+
+
 def test_destructive_intent_guard_blocks_question() -> None:
     with pytest.raises(DestructiveIntentError, match="delete"):
         validate_safe_question_intent("Please delete old QA rows")
@@ -555,6 +687,13 @@ def test_api_ask_blocks_destructive_intent_before_query_agent(monkeypatch) -> No
         raise AssertionError("Planner should not be called for destructive intent.")
 
     monkeypatch.setattr("app.ask_service.plan_analysis", fail_if_called)
+    monkeypatch.setattr(
+        "app.ask_service.refresh_settings",
+        lambda: __import__("app.config").config.Settings(
+            query_agent_mode="mock",
+            enable_ask_event_logging=False,
+        ),
+    )
 
     client = TestClient(app)
     response = client.post("/api/ask", json={"question": "Drop the qa table"})
@@ -738,3 +877,11 @@ def build_response_payload_for_rows(rows: list[dict[str, object]]) -> dict[str, 
     )
 
     return __import__("json").loads(messages[1]["content"])
+
+
+def read_jsonl(log_path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
