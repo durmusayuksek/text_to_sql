@@ -1,25 +1,60 @@
 # Real Data Onboarding
 
-This guide explains how to replace development sample Parquet files or add new real business Parquet files.
+This guide explains how to add real business Parquet files safely to the central Data Catalog.
 
-The app now uses one central data catalog for a single Question & Answer Text-to-SQL workflow. Do not add raw data directly to planner or query prompts. The Analysis Planner and Query Agent receive metadata only.
+The app stays a single Question & Answer Text-to-SQL workflow. Do not connect production files automatically. Add one table first, verify it, then add relationships and joins later.
 
-## Where Real Data Goes
+## Safety Principles
 
-Store real Parquet files under `data/` using stable, descriptive paths:
+- Prefer cleaned analytical Parquet files over raw operational exports.
+- Remove unnecessary personal or sensitive columns before they reach the app.
+- Keep customer names, emails, phone numbers, addresses, personal notes, and free-text comments out of analytical files unless there is a strong approved reason.
+- Mark identifier columns as sensitive in `backend/app/catalog.py`.
+- Analysis Planner and Query Agent receive catalog metadata only, not raw rows.
+- Response Agent receives minimized query result summaries. Sensitive columns are redacted before OpenAI payloads are built.
+- `DEBUG_QUERY_RESULTS=true` can still return local raw rows to the API client for debugging, so use it carefully.
+
+## Prepare Parquet Files
+
+1. Export from the source system into a controlled staging area.
+2. Remove columns that are not needed for analysis.
+3. Remove direct personal data such as names, email, phone, address, and free-text comments.
+4. Keep stable business dimensions, dates, and numeric measures.
+5. Convert to Parquet with clear column names using lowercase snake_case.
+6. Store the file under `data/<domain>/<table_name>.parquet`.
+
+Example:
 
 ```text
 data/
-|-- pax_forecast/
-|-- special_cruise/
-`-- qa/
+`-- sales/
+    `-- sales_bookings.parquet
 ```
 
-Existing Pax Forecast and Special Cruise files are no longer active modules. They may remain as catalog data sources. New data sources can use new folders under `data/`.
+## Inspect A Parquet File
 
-## Required Catalog Metadata
+Use the helper script before adding a file to the catalog:
 
-Every table that SQL may query must be represented in `backend/app/catalog.py`.
+```powershell
+C:\Users\durmuyu\AppData\Local\anaconda3\python.exe scripts\inspect_parquet.py data\sales\sales_bookings.parquet
+```
+
+The script prints:
+
+- column names
+- data types
+- row count
+- sample rows
+- null counts
+- possible identifier columns
+- possible date columns
+- possible numeric measure columns
+
+Use this output to decide which columns belong in the catalog and which should be removed or marked sensitive.
+
+## Catalog Metadata
+
+Every queryable table must be represented in `backend/app/catalog.py`.
 
 Each table needs:
 
@@ -28,177 +63,180 @@ Each table needs:
 - `description`
 - column metadata
 
-The catalog also supports:
+Each column should include:
 
-- relationships
-- example questions
-- example SQL
+- `name`
+- `type`
+- `description`
+- optional `business_terms`
+- optional `examples`
+- optional `sensitive`
+- optional `redaction_strategy`
 
-Relationships should be added whenever SQL may need to join tables.
+Supported redaction strategies:
 
-## Table Metadata Checklist
+- `omit`: remove the sensitive column from Response Agent OpenAI sample rows and summaries.
+- `mask`: include the column but replace values with `***REDACTED***`.
+- `hash`: include a deterministic SHA-256 hash value.
 
-Complete this checklist before adding a real table to the catalog.
-
-## Identity
-
-- What does one row represent?
-- What is the grain of the table?
-- What is the primary key?
-- Is the primary key unique?
-- Is the table an event table, snapshot table, dimension table, or aggregate table?
-
-## Columns
-
-- Which columns are dates?
-- Which columns are measures?
-- Which columns are dimensions?
-- Which columns are identifiers?
-- Which columns are nullable?
-- Which columns need business-friendly descriptions?
-- Which columns have common aliases or business terms?
-- Which columns have useful example values?
-
-## Joins
-
-- Which columns can be joined to other tables?
-- Are join keys unique on one side or many-to-many?
-- What is the relationship type?
-- Are there known join caveats?
-
-## Data Quality
-
-- Are there duplicate rows?
-- Are there missing values in important columns?
-- Are dates in the expected range?
-- Are numeric measures in expected units?
-- Are currencies consistent?
-- Are percentages represented as `0.32` or `32`?
-
-## Sensitivity
-
-- Are there sensitive columns?
-- Are there personal data columns?
-- Are there columns that should never be exposed to agents or users?
-- Should sensitive columns be excluded from Parquet files or omitted from catalog metadata?
-
-## Example Metadata Profile
+Defaults:
 
 ```python
-TableDefinition(
-    table_name="pax_forecast",
-    data_path="data/pax_forecast/pax_forecast.parquet",
-    description="Passenger forecast rows by departure date and route.",
-    columns=(
-        ColumnDefinition(
-            name="departure_date",
-            type="DATE",
-            description="Scheduled departure date for the sailing.",
-            examples=("2026-06-01",),
-            business_terms=("sailing date", "departure"),
-        ),
-        ColumnDefinition(
-            name="forecast_pax",
-            type="INTEGER",
-            description="Forecasted passenger count.",
-            examples=("1840",),
-            business_terms=("pax", "passengers", "demand"),
-        ),
-    ),
+sensitive=False
+redaction_strategy="omit"
+```
+
+For identifiers such as `booking_id`, `client_id`, `customer_id`, reservation IDs, loyalty IDs, or account IDs, start with:
+
+```python
+sensitive=True
+redaction_strategy="omit"
+```
+
+## Sales Bookings Example
+
+Do not add this table to the active catalog until `data/sales/sales_bookings.parquet` exists.
+
+A copy-ready example is available at:
+
+```text
+docs/catalog_examples/sales_bookings_catalog_entry.py
+```
+
+The example table is `sales_bookings` with these columns:
+
+- `booking_date`
+- `departure_date`
+- `route`
+- `ship`
+- `market`
+- `sales_channel`
+- `passenger_count`
+- `net_sales`
+- `booking_id` marked `sensitive=True`, `redaction_strategy="omit"`
+- `client_id` marked `sensitive=True`, `redaction_strategy="omit"`
+
+It intentionally does not include customer names, emails, phone numbers, addresses, or free-text comments.
+
+## Column Descriptions
+
+Write descriptions for business users, not database engineers.
+
+Good:
+
+```python
+ColumnDefinition(
+    name="net_sales",
+    type="DECIMAL",
+    description="Net sales amount for the booking after discounts and exclusions.",
+    business_terms=("sales", "revenue", "net revenue"),
 )
 ```
+
+Weak:
+
+```python
+ColumnDefinition(
+    name="net_sales",
+    type="DECIMAL",
+    description="Decimal column.",
+)
+```
+
+## Relationships
+
+Add relationships when joins are expected.
+
+Example:
 
 ```python
 RelationshipDefinition(
-    left_table="pax_forecast",
+    left_table="sales_bookings",
     left_column="route",
-    right_table="pax_route_targets",
+    right_table="route_targets",
     right_column="route",
     relationship_type="many_to_one",
-    description="Each forecast row can join to one route target by route.",
+    description="Each booking can join to one route target by route.",
 )
 ```
 
-## Replacing Sample Parquet Files
+Start with one table first. Add joins only after each table has been tested independently.
 
-1. Place the real Parquet file under `data/`.
-2. Confirm the file name and table name you want the app to use.
-3. Update the table `data_path` in `backend/app/catalog.py`.
-4. Update column metadata to match the real file.
-5. Add or update relationships.
-6. Update example questions.
-7. Update example SQL.
-8. Run validation checks.
-9. Test `/api/ask` with representative questions.
+## Example Questions And SQL
 
-## Validating Real Data
+Add example questions that reflect real business language:
 
-Check that the file path in the catalog exists:
+```python
+example_questions=(
+    "What was passenger volume by route last month?",
+    "Which sales channels generated the most net sales?",
+    "Show booking trends by market and departure month.",
+)
+```
+
+Add example SQL that uses safe DuckDB SQL and catalog table names:
+
+```python
+example_sql=(
+    "SELECT route, SUM(passenger_count) AS passengers FROM sales_bookings GROUP BY route ORDER BY passengers DESC LIMIT 10",
+    "SELECT sales_channel, SUM(net_sales) AS net_sales FROM sales_bookings GROUP BY sales_channel ORDER BY net_sales DESC LIMIT 10",
+)
+```
+
+## Test One Table First
+
+1. Put the Parquet file under `data/sales/sales_bookings.parquet`.
+2. Run the inspection helper.
+3. Add the table metadata to `backend/app/catalog.py`.
+4. Keep relationships empty at first.
+5. Add one or two example questions and example SQL statements.
+6. Run backend tests.
+7. Ask one simple Swagger question, such as:
+
+```json
+{
+  "question": "Show passenger volume by route"
+}
+```
+
+## Test Joins Later
+
+After the first table works:
+
+1. Add the second Parquet file.
+2. Inspect it with `scripts/inspect_parquet.py`.
+3. Add its table metadata.
+4. Add one relationship.
+5. Add one join example SQL.
+6. Test the join through `run_query(sql)` or Swagger.
+
+Do not bypass the application query runner for app validation. User SQL must still go through `sql_validator.py`.
+
+## Validation Commands
+
+Run backend tests:
 
 ```powershell
-Get-ChildItem data\pax_forecast\pax_forecast.parquet
+cd backend
+C:\Users\durmuyu\AppData\Local\anaconda3\python.exe -m pytest
 ```
 
-Confirm DuckDB can read it:
+Run the frontend build if API response types or frontend files changed:
 
 ```powershell
-C:\Users\durmuyu\AppData\Local\anaconda3\python.exe -c "import duckdb; print(duckdb.sql(\"SELECT * FROM read_parquet('data/pax_forecast/pax_forecast.parquet') LIMIT 5\").fetchall())"
+cd frontend
+npm run build
 ```
 
-Confirm row count:
+Inspect a Parquet file:
 
-```sql
-SELECT COUNT(*) FROM read_parquet('data/pax_forecast/pax_forecast.parquet');
+```powershell
+C:\Users\durmuyu\AppData\Local\anaconda3\python.exe scripts\inspect_parquet.py data\sales\sales_bookings.parquet
 ```
 
-Confirm column names:
+From the repo root, test a simple catalog query after adding the table:
 
-```sql
-DESCRIBE SELECT * FROM read_parquet('data/pax_forecast/pax_forecast.parquet');
+```powershell
+cd backend
+C:\Users\durmuyu\AppData\Local\anaconda3\python.exe -c "from app.duckdb_layer.query_runner import run_query; print(run_query('SELECT route, SUM(passenger_count) AS passengers FROM sales_bookings GROUP BY route LIMIT 10'))"
 ```
-
-Compare real column names to catalog metadata.
-
-Use app-level table names in example SQL:
-
-```sql
-SELECT pf.route, pf.forecast_pax, rt.target_load_factor
-FROM pax_forecast pf
-JOIN pax_route_targets rt ON pf.route = rt.route
-LIMIT 10;
-```
-
-The query should run through `run_query(sql)` or `run_queries([...])`, not by bypassing the application query runner.
-
-## Confirm SQL Validator Scope
-
-- Queries against catalog tables should pass.
-- Queries against unknown tables should fail.
-- File-reading functions such as `read_parquet()` should fail when used in user SQL.
-- Destructive or modifying statements should fail.
-
-The validator should allow only tables listed in the central data catalog.
-
-## Agent Safety Note
-
-Allowed Analysis Planner and Query Agent context:
-
-- catalog description
-- table names
-- column names
-- column types
-- column descriptions
-- examples
-- business terms
-- relationships
-- example questions
-- example SQL
-
-Not allowed in Analysis Planner or Query Agent context:
-
-- full Parquet rows
-- sensitive raw values
-- unrestricted file paths
-- direct access instructions for `read_parquet()`
-
-Use `build_catalog_context()` as the source of planner and Query Agent schema context. The Response Agent may receive validated, limited query results for answer writing, but it must not receive unrestricted Parquet rows or execute SQL.

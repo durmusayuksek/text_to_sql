@@ -30,7 +30,9 @@
 - SQL is validated before execution.
 - `/api/ask` can hide raw query results unless `DEBUG_QUERY_RESULTS=true`.
 - Mock mode is deterministic and remains the default.
-- OpenAI mode is available behind `QUERY_AGENT_MODE=openai`.
+- OpenAI mode is available behind `AGENT_MODE=openai`.
+- `QUERY_AGENT_MODE` remains available as a backward-compatible fallback.
+- Response Agent OpenAI payloads use minimized query result summaries.
 
 ## Next Planned Milestones
 

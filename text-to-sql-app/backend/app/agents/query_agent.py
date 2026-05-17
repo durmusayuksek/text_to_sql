@@ -44,7 +44,7 @@ def generate_sql(question: str, plan: AnalysisPlannerResult) -> QueryAgentResult
     settings = get_settings()
     schema_context = build_catalog_context()
 
-    if settings.query_agent_mode == "openai":
+    if settings.agent_mode == "openai":
         return generate_openai_sql(question, plan, schema_context)
 
     return QueryAgentResult(

@@ -86,11 +86,13 @@ OpenAI mode sends only the user question, catalog metadata, and Analysis Planner
 
 The backend reads environment variables with `python-dotenv` in `backend/app/config.py`.
 
-- `QUERY_AGENT_MODE`: `mock` or `openai`
-- `OPENAI_API_KEY`: required only when `QUERY_AGENT_MODE=openai`
+- `AGENT_MODE`: `mock` or `openai`
+- `QUERY_AGENT_MODE`: backward-compatible fallback if `AGENT_MODE` is not set
+- `OPENAI_API_KEY`: required only when `AGENT_MODE=openai`
 - `OPENAI_MODEL`: defaults to `gpt-4.1-mini`
+- `RESPONSE_AGENT_MAX_SAMPLE_ROWS`: defaults to `5`
 
-If `QUERY_AGENT_MODE=openai` and `OPENAI_API_KEY` is missing, the backend raises a clear configuration error.
+If `AGENT_MODE=openai` and `OPENAI_API_KEY` is missing, the backend raises a clear configuration error.
 
 ## SQL Validation Flow
 
@@ -145,12 +147,24 @@ Each column defines:
 - `description`
 - optional `examples`
 - optional `business_terms`
+- optional `sensitive`
+- optional `redaction_strategy`: `omit`, `mask`, or `hash`
 
 Relationships describe join paths between tables. This keeps the architecture extensible for future data sources without reintroducing selectable modules.
 
 ## Response Agent Flow
 
-The Response Agent does not generate SQL and does not execute SQL. It converts the original question, planner output, generated query metadata, and validated DuckDB results into a business-friendly answer.
+The Response Agent does not generate SQL and does not execute SQL. It converts the original question, planner output, generated query metadata, and minimized validated DuckDB result summaries into a business-friendly answer.
+
+In OpenAI mode, the backend does not send full raw query rows to the Response Agent. It sends query id, purpose, SQL, row count, column names, warnings, simple numeric summaries, and up to `RESPONSE_AGENT_MAX_SAMPLE_ROWS` sample rows.
+
+Before the Response Agent OpenAI payload is built, catalog sensitivity controls are applied:
+
+- `omit`: remove the sensitive column from sample rows and summaries.
+- `mask`: include the column but replace values with `***REDACTED***`.
+- `hash`: include the column with a deterministic SHA-256 hash value.
+
+Numeric summaries are never calculated for sensitive columns.
 
 It returns JSON with:
 
@@ -164,4 +178,4 @@ It returns JSON with:
 }
 ```
 
-Raw query rows are included in `/api/ask` responses only when `DEBUG_QUERY_RESULTS=true`.
+Raw query rows are included in `/api/ask` responses only when `DEBUG_QUERY_RESULTS=true`. This API debug flag is separate from Response Agent minimization.

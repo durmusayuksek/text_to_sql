@@ -64,7 +64,7 @@ def answer_question(request: AskRequest) -> AskResponse:
             if settings.debug_query_results
             else None
         ),
-        query_agent_mode=settings.query_agent_mode,
+        query_agent_mode=settings.agent_mode,
     )
 
 

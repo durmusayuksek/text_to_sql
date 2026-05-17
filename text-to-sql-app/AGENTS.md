@@ -43,6 +43,8 @@ Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer
 - Query Agent prompts must receive catalog metadata only, never full Parquet data.
 - Analysis Planner prompts must receive catalog metadata only, never full Parquet data.
 - Response Agent prompts may receive validated query results for answer writing, but must not generate or execute SQL.
+- In OpenAI mode, Response Agent prompts should receive minimized query result summaries, not full raw row dumps.
+- Catalog `sensitive` and `redaction_strategy` metadata must be applied before any row samples or numeric summaries are sent to OpenAI.
 - Keep both `mock` and `openai` Query Agent modes.
 
 ## SQL Safety Rules
@@ -65,7 +67,7 @@ Pax Forecast and Special Cruise / Entertainment Profit Calculation are no longer
   - relationship metadata when joins are useful
   - example questions and example SQL when helpful
 - Catalog metadata should describe tables, columns, relationships, and examples clearly enough for the Query Agent.
-- Do not expose sensitive raw values to the Query Agent.
+- Do not expose sensitive raw values to any OpenAI-backed agent. Mark sensitive catalog columns and choose `omit`, `mask`, or `hash`.
 
 ## Frontend Standards
 

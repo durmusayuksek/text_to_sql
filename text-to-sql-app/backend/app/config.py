@@ -47,10 +47,17 @@ class Settings:
     frontend_origin: str = "http://localhost:5173"
 
     openai_api_key: str | None = None
-    query_agent_mode: str = "mock"  # "mock" or "openai"
+    agent_mode: str | None = None  # "mock" or "openai"
+    query_agent_mode: str | None = None  # Backward-compatible alias.
     openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: int = 30
     debug_query_results: bool = False
+    response_agent_max_sample_rows: int = 5
+
+    def __post_init__(self) -> None:
+        mode = (self.agent_mode or self.query_agent_mode or "mock").lower()
+        object.__setattr__(self, "agent_mode", mode)
+        object.__setattr__(self, "query_agent_mode", mode)
 
 
 @lru_cache
@@ -63,9 +70,10 @@ def get_settings() -> Settings:
             "http://localhost:5173",
         ),
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,
-        query_agent_mode=os.getenv(
-            "QUERY_AGENT_MODE",
-            "mock",
+        agent_mode=(
+            os.getenv("AGENT_MODE")
+            or os.getenv("QUERY_AGENT_MODE")
+            or "mock"
         ).lower(),
         openai_model=os.getenv(
             "OPENAI_MODEL",
@@ -78,6 +86,10 @@ def get_settings() -> Settings:
         debug_query_results=_get_bool_env(
             "DEBUG_QUERY_RESULTS",
             False,
+        ),
+        response_agent_max_sample_rows=_get_int_env(
+            "RESPONSE_AGENT_MAX_SAMPLE_ROWS",
+            5,
         ),
     )
 
@@ -93,13 +105,14 @@ def refresh_settings() -> Settings:
 
 
 def validate_settings(settings: Settings) -> None:
-    if settings.query_agent_mode not in {"mock", "openai"}:
-        raise ConfigurationError("QUERY_AGENT_MODE must be either 'mock' or 'openai'.")
+    if settings.agent_mode not in {"mock", "openai"}:
+        raise ConfigurationError("AGENT_MODE must be either 'mock' or 'openai'.")
 
-    if settings.query_agent_mode == "openai" and not settings.openai_api_key:
-        raise ConfigurationError(
-            "OPENAI_API_KEY is required when QUERY_AGENT_MODE=openai."
-        )
+    if settings.agent_mode == "openai" and not settings.openai_api_key:
+        raise ConfigurationError("OPENAI_API_KEY is required when AGENT_MODE=openai.")
 
     if settings.openai_timeout_seconds <= 0:
         raise ConfigurationError("OPENAI_TIMEOUT_SECONDS must be greater than 0.")
+
+    if settings.response_agent_max_sample_rows < 0:
+        raise ConfigurationError("RESPONSE_AGENT_MAX_SAMPLE_ROWS cannot be negative.")

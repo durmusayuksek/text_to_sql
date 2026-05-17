@@ -84,6 +84,13 @@ export function AnswerPanel({ answer, isLoading }: AnswerPanelProps) {
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Rows for {result.query_id}
                   </p>
+                  {result.warnings.length > 0 ? (
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-700">
+                      {result.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <div className="mt-3 space-y-2">
                     {result.rows.map((row, index) => (
                       <div

@@ -29,6 +29,8 @@ User Question -> Analysis Planner -> Query Agent -> SQL Validator -> DuckDB Quer
 
 Agents do not execute SQL. The backend validates and runs every generated query.
 
+Catalog columns can be marked sensitive with `sensitive=True` and a `redaction_strategy` of `omit`, `mask`, or `hash`. Response Agent OpenAI payloads are minimized and apply these catalog redaction rules before sending row samples or numeric summaries.
+
 ## Environment
 
 Copy `.env.example` to `.env` and adjust values locally.
@@ -37,22 +39,25 @@ Copy `.env.example` to `.env` and adjust values locally.
 cp .env.example .env
 ```
 
-Query Agent modes:
+Agent modes:
 
-- `QUERY_AGENT_MODE=mock`: default mode. Uses deterministic mocked SQL and does not call OpenAI.
-- `QUERY_AGENT_MODE=openai`: uses OpenAI to generate SQL from catalog metadata only.
+- `AGENT_MODE=mock`: default mode. Uses deterministic mocked agents and does not call OpenAI.
+- `AGENT_MODE=openai`: uses OpenAI for the planner, Query Agent, and Response Agent.
+- `QUERY_AGENT_MODE` is still supported as a backward-compatible fallback when `AGENT_MODE` is not set.
 
 Debug responses:
 
 - `DEBUG_QUERY_RESULTS=false`: default. API responses include generated SQL, but hide raw rows.
 - `DEBUG_QUERY_RESULTS=true`: include limited query rows in `/api/ask` responses for debugging.
+- `RESPONSE_AGENT_MAX_SAMPLE_ROWS=5`: controls how many sample rows the Response Agent can receive in OpenAI mode.
 
 Required OpenAI settings for `openai` mode:
 
 ```text
 OPENAI_API_KEY=
-QUERY_AGENT_MODE=mock
+AGENT_MODE=mock
 OPENAI_MODEL=gpt-4.1-mini
+RESPONSE_AGENT_MAX_SAMPLE_ROWS=5
 ```
 
 Do not commit `.env`. It is ignored by git.

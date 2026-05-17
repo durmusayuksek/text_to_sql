@@ -19,6 +19,7 @@ export interface QueryResult {
   purpose: string;
   sql: string;
   rows: Array<Record<string, string | number | boolean | null>>;
+  warnings: string[];
 }
 
 export interface AskResponse {

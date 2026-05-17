@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ class QueryExecutionResult:
     purpose: str
     sql: str
     rows: list[dict[str, Any]]
+    warnings: list[str] = field(default_factory=list)
 
     def to_response_payload(self) -> dict[str, Any]:
         return {
@@ -34,6 +35,7 @@ class QueryExecutionResult:
             "purpose": self.purpose,
             "sql": self.sql,
             "rows": self.rows,
+            "warnings": self.warnings,
         }
 
 
@@ -114,11 +116,10 @@ def run_queries(queries: list[QueryExecutionRequest]) -> list[QueryExecutionResu
             rows = result.fetchall()
             columns = [column[0] for column in result.description]
             mapped_rows = [dict(zip(columns, row, strict=True)) for row in rows]
+            warnings = []
 
             if not mapped_rows:
-                raise EmptyQueryResultError(
-                    f"Query '{query.query_id}' returned no rows."
-                )
+                warnings.append(f"Query '{query.query_id}' returned no rows.")
 
             query_results.append(
                 QueryExecutionResult(
@@ -126,6 +127,7 @@ def run_queries(queries: list[QueryExecutionRequest]) -> list[QueryExecutionResu
                     purpose=query.purpose,
                     sql=query.sql,
                     rows=mapped_rows,
+                    warnings=warnings,
                 )
             )
     except duckdb.Error as error:

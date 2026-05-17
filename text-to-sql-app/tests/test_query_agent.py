@@ -15,10 +15,12 @@ from app.agents.query_agent import (
 )
 from app.agents.response_agent import (
     ResponseAgentResponseError,
+    build_openai_messages as build_response_openai_messages,
     generate_response,
     parse_response_agent_response,
 )
 from app.ask_service import DestructiveIntentError, validate_safe_question_intent
+from app.catalog import ColumnDefinition, DataCatalog, TableDefinition
 from app.config import ConfigurationError, get_settings
 from app.duckdb_layer.query_runner import (
     QueryExecutionRequest,
@@ -31,7 +33,7 @@ from app.main import app
 @pytest.fixture(autouse=True)
 def default_query_agent_mode(monkeypatch):
     get_settings.cache_clear()
-    monkeypatch.setenv("QUERY_AGENT_MODE", "mock")
+    monkeypatch.setenv("AGENT_MODE", "mock")
     monkeypatch.delenv("DEBUG_QUERY_RESULTS", raising=False)
     yield
     get_settings.cache_clear()
@@ -218,6 +220,221 @@ def test_response_agent_returns_business_friendly_answer() -> None:
     assert response.confidence in {"high", "medium", "low"}
 
 
+def test_response_agent_openai_payload_uses_minimized_query_results() -> None:
+    plan = plan_analysis("Show QA rows")
+    query_agent_result = generate_sql("Show QA rows", plan)
+    query_results = [
+        QueryExecutionResult(
+            query_id="main",
+            purpose="Return QA rows.",
+            sql="SELECT * FROM qa LIMIT 10",
+            rows=[
+                {"metric": f"metric_{index}", "value": index}
+                for index in range(10)
+            ],
+        )
+    ]
+
+    messages = build_response_openai_messages(
+        question="Show QA rows",
+        plan=plan,
+        query_agent_result=query_agent_result,
+        query_results=query_results,
+        max_sample_rows=2,
+    )
+    payload = __import__("json").loads(messages[1]["content"])
+    summary = payload["query_result_summaries"][0]
+
+    assert "query_results" not in payload
+    assert summary["row_count"] == 10
+    assert summary["columns"] == ["metric", "value"]
+    assert len(summary["sample_rows"]) == 2
+    assert summary["sample_rows"][0]["metric"] == "metric_0"
+    assert "metric_9" not in messages[1]["content"]
+    assert summary["numeric_summaries"]["value"]["max"] == 9.0
+
+
+def test_response_agent_max_sample_rows_setting_is_respected(monkeypatch) -> None:
+    from app.config import Settings
+
+    plan = plan_analysis("Show QA rows")
+    query_agent_result = generate_sql("Show QA rows", plan)
+    query_results = [
+        QueryExecutionResult(
+            query_id="main",
+            purpose="Return QA rows.",
+            sql="SELECT * FROM qa LIMIT 10",
+            rows=[
+                {"metric": f"metric_{index}", "value": index}
+                for index in range(4)
+            ],
+        )
+    ]
+    captured_messages: list[dict[str, str]] = []
+
+    monkeypatch.setattr(
+        "app.agents.response_agent.get_settings",
+        lambda: Settings(
+            agent_mode="openai",
+            openai_api_key="test-key",
+            response_agent_max_sample_rows=1,
+        ),
+    )
+
+    def fake_create_chat_completion(messages: list[dict[str, str]]) -> str:
+        captured_messages.extend(messages)
+        return """
+        {
+          "answer": "One row sample was used.",
+          "key_findings": [],
+          "assumptions": [],
+          "limitations": [],
+          "confidence": "high"
+        }
+        """
+
+    monkeypatch.setattr(
+        "app.agents.response_agent.openai_client.create_chat_completion",
+        fake_create_chat_completion,
+    )
+
+    generate_response(
+        question="Show QA rows",
+        plan=plan,
+        query_agent_result=query_agent_result,
+        query_results=query_results,
+    )
+
+    payload = __import__("json").loads(captured_messages[1]["content"])
+    assert len(payload["query_result_summaries"][0]["sample_rows"]) == 1
+
+
+def test_sensitive_column_with_omit_is_not_sent_to_openai(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.agents.response_agent.get_data_catalog",
+        lambda: DataCatalog(
+            description="test catalog",
+            tables=(
+                TableDefinition(
+                    table_name="customers",
+                    data_path="data/customers.parquet",
+                    description="Customer records.",
+                    columns=(
+                        ColumnDefinition(
+                            name="customer_email",
+                            type="VARCHAR",
+                            description="Customer email.",
+                            sensitive=True,
+                            redaction_strategy="omit",
+                        ),
+                        ColumnDefinition(
+                            name="revenue",
+                            type="DOUBLE",
+                            description="Revenue.",
+                        ),
+                    ),
+                ),
+            ),
+            relationships=(),
+            example_questions=(),
+            example_sql=(),
+        ),
+    )
+
+    payload = build_response_payload_for_rows(
+        [
+            {
+                "customer_email": "person@example.com",
+                "revenue": 100.0,
+            }
+        ]
+    )
+    summary = payload["query_result_summaries"][0]
+
+    assert "customer_email" not in summary["columns"]
+    assert "customer_email" not in summary["sample_rows"][0]
+    assert "customer_email" not in summary["numeric_summaries"]
+    assert summary["redacted_columns"] == [
+        {"name": "customer_email", "strategy": "omit"}
+    ]
+    assert "person@example.com" not in __import__("json").dumps(payload)
+    assert summary["sample_rows"][0]["revenue"] == 100.0
+
+
+def test_sensitive_column_with_mask_is_redacted_in_openai_payload(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.agents.response_agent.get_data_catalog",
+        lambda: DataCatalog(
+            description="test catalog",
+            tables=(
+                TableDefinition(
+                    table_name="customers",
+                    data_path="data/customers.parquet",
+                    description="Customer records.",
+                    columns=(
+                        ColumnDefinition(
+                            name="customer_email",
+                            type="VARCHAR",
+                            description="Customer email.",
+                            sensitive=True,
+                            redaction_strategy="mask",
+                        ),
+                        ColumnDefinition(
+                            name="customer_count",
+                            type="INTEGER",
+                            description="Customer count.",
+                            sensitive=True,
+                            redaction_strategy="mask",
+                        ),
+                        ColumnDefinition(
+                            name="route",
+                            type="VARCHAR",
+                            description="Route.",
+                        ),
+                    ),
+                ),
+            ),
+            relationships=(),
+            example_questions=(),
+            example_sql=(),
+        ),
+    )
+
+    payload = build_response_payload_for_rows(
+        [
+            {
+                "customer_email": "person@example.com",
+                "customer_count": 42,
+                "route": "Stockholm-Tallinn",
+            }
+        ]
+    )
+    summary = payload["query_result_summaries"][0]
+
+    assert "customer_email" in summary["columns"]
+    assert summary["sample_rows"][0]["customer_email"] == "***REDACTED***"
+    assert summary["sample_rows"][0]["customer_count"] == "***REDACTED***"
+    assert "customer_count" not in summary["numeric_summaries"]
+    assert summary["sample_rows"][0]["route"] == "Stockholm-Tallinn"
+    assert "person@example.com" not in __import__("json").dumps(payload)
+
+
+def test_default_non_sensitive_columns_are_included_in_openai_payload() -> None:
+    payload = build_response_payload_for_rows(
+        [
+            {
+                "metric": "on_time_departure_rate",
+                "value": 0.91,
+            }
+        ]
+    )
+    summary = payload["query_result_summaries"][0]
+
+    assert summary["columns"] == ["metric", "value"]
+    assert summary["sample_rows"][0]["metric"] == "on_time_departure_rate"
+    assert summary["numeric_summaries"]["value"]["max"] == 0.91
+
+
 def test_response_agent_json_response_parses() -> None:
     result = parse_response_agent_response(
         """
@@ -286,6 +503,48 @@ def test_api_ask_includes_query_results_when_debug_enabled(monkeypatch) -> None:
     assert payload["query_results"][0]["rows"]
 
 
+def test_empty_query_results_do_not_fail_multi_query_execution() -> None:
+    results = run_queries(
+        [
+            QueryExecutionRequest(
+                query_id="empty",
+                purpose="Return no QA rows.",
+                sql="SELECT * FROM qa WHERE 1 = 0",
+            ),
+            QueryExecutionRequest(
+                query_id="non_empty",
+                purpose="Return one QA row.",
+                sql="SELECT * FROM qa LIMIT 1",
+            ),
+        ]
+    )
+
+    assert results[0].rows == []
+    assert results[0].warnings == ["Query 'empty' returned no rows."]
+    assert results[1].rows
+
+
+def test_empty_query_result_creates_response_limitation() -> None:
+    plan = plan_analysis("Show QA rows")
+    query_agent_result = generate_sql("Show QA rows", plan)
+    response = generate_response(
+        question="Show QA rows",
+        plan=plan,
+        query_agent_result=query_agent_result,
+        query_results=[
+            QueryExecutionResult(
+                query_id="empty",
+                purpose="Return no QA rows.",
+                sql="SELECT * FROM qa WHERE 1 = 0",
+                rows=[],
+                warnings=["Query 'empty' returned no rows."],
+            )
+        ],
+    )
+
+    assert response.limitations == ["Query 'empty' returned no rows."]
+
+
 def test_destructive_intent_guard_blocks_question() -> None:
     with pytest.raises(DestructiveIntentError, match="delete"):
         validate_safe_question_intent("Please delete old QA rows")
@@ -306,7 +565,7 @@ def test_api_ask_blocks_destructive_intent_before_query_agent(monkeypatch) -> No
 
 def test_openai_mode_uses_mocked_openai_responses(monkeypatch) -> None:
     get_settings.cache_clear()
-    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.setenv("AGENT_MODE", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
 
@@ -370,7 +629,7 @@ def test_openai_mode_uses_mocked_openai_responses(monkeypatch) -> None:
 
 def test_openai_mode_missing_api_key_fails(monkeypatch) -> None:
     get_settings.cache_clear()
-    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.setenv("AGENT_MODE", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(ConfigurationError, match="OPENAI_API_KEY is required"):
@@ -383,7 +642,7 @@ def test_openai_low_confidence_query_response_fails(monkeypatch) -> None:
     plan = plan_analysis("Show QA rows")
 
     get_settings.cache_clear()
-    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.setenv("AGENT_MODE", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     def fake_create_chat_completion(messages: list[dict[str, str]]) -> str:
@@ -431,3 +690,51 @@ def test_openai_messages_include_only_metadata_and_plan_context() -> None:
 def test_malformed_planner_json_response_fails() -> None:
     with pytest.raises(AnalysisPlannerResponseError, match="not valid JSON"):
         parse_analysis_planner_response("{bad json")
+
+
+def test_agent_mode_setting_takes_precedence(monkeypatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("AGENT_MODE", "mock")
+    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+
+    settings = get_settings()
+
+    assert settings.agent_mode == "mock"
+    assert settings.query_agent_mode == "mock"
+
+    get_settings.cache_clear()
+
+
+def test_query_agent_mode_fallback_still_works(monkeypatch) -> None:
+    get_settings.cache_clear()
+    monkeypatch.delenv("AGENT_MODE", raising=False)
+    monkeypatch.setenv("QUERY_AGENT_MODE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    settings = get_settings()
+
+    assert settings.agent_mode == "openai"
+    assert settings.query_agent_mode == "openai"
+
+    get_settings.cache_clear()
+
+
+def build_response_payload_for_rows(rows: list[dict[str, object]]) -> dict[str, object]:
+    plan = plan_analysis("Show rows")
+    query_agent_result = generate_sql("Show rows", plan)
+    messages = build_response_openai_messages(
+        question="Show rows",
+        plan=plan,
+        query_agent_result=query_agent_result,
+        query_results=[
+            QueryExecutionResult(
+                query_id="main",
+                purpose="Return rows.",
+                sql="SELECT * FROM test_table LIMIT 10",
+                rows=rows,
+            )
+        ],
+        max_sample_rows=5,
+    )
+
+    return __import__("json").loads(messages[1]["content"])

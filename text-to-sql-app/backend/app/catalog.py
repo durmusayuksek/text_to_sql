@@ -1,4 +1,8 @@
 from dataclasses import dataclass
+from typing import Literal
+
+
+RedactionStrategy = Literal["omit", "mask", "hash"]
 
 
 @dataclass(frozen=True)
@@ -8,6 +12,8 @@ class ColumnDefinition:
     description: str
     examples: tuple[str, ...] = ()
     business_terms: tuple[str, ...] = ()
+    sensitive: bool = False
+    redaction_strategy: RedactionStrategy = "omit"
 
 
 @dataclass(frozen=True)

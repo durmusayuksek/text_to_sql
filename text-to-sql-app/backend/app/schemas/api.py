@@ -24,6 +24,7 @@ class QueryResult(BaseModel):
     purpose: str
     sql: str
     rows: list[dict[str, Any]]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class AskResponse(BaseModel):

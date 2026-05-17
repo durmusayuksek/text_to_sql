@@ -54,7 +54,7 @@ def plan_analysis(question: str) -> AnalysisPlannerResult:
     settings = get_settings()
     catalog_context = build_catalog_context()
 
-    if settings.query_agent_mode == "openai":
+    if settings.agent_mode == "openai":
         raw_response = openai_client.create_chat_completion(
             build_openai_messages(question, catalog_context)
         )
