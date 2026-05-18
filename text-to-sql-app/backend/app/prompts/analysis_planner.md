@@ -29,7 +29,7 @@ You will receive:
 - If the question cannot be mapped confidently to the catalog, use `unknown` question type and low confidence.
 - All array fields must be arrays of strings.
 - For `filters`, write each filter as a short string such as `"departure_date is last month"`; do not return filter objects.
-- For `required_relationships`, write each relationship as a short string such as `"pax_forecast.route -> pax_route_targets.route"`; do not return relationship objects.
+- For `required_relationships`, write each relationship as a short string such as `"table_a.column -> table_b.column"`; do not return relationship objects.
 
 ## Output Format
 

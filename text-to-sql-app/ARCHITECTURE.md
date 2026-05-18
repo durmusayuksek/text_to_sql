@@ -72,7 +72,7 @@ The prompt template is `backend/app/prompts/query_agent.md`. The parser in `back
     {
       "query_id": "main",
       "purpose": "Explain what this query calculates.",
-      "sql": "SELECT * FROM qa LIMIT 10"
+      "sql": "SELECT * FROM sales_figures_since_2025 LIMIT 10"
     }
   ],
   "assumptions": [],

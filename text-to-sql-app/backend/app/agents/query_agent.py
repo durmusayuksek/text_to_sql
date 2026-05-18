@@ -208,22 +208,23 @@ def get_mock_sql(question: str) -> str:
 
     if "passenger" in lowered_question or "pax" in lowered_question:
         return (
-            "SELECT route, SUM(forecast_pax) AS forecast_passengers "
-            "FROM pax_forecast "
-            "GROUP BY route "
-            "ORDER BY forecast_passengers DESC "
+            "SELECT route_direction, SUM(booked_pax) AS booked_passengers "
+            "FROM sales_figures_since_2025 "
+            "GROUP BY route_direction "
+            "ORDER BY booked_passengers DESC "
             "LIMIT 10"
         )
 
-    if "margin" in lowered_question or "profit" in lowered_question:
+    if "revenue" in lowered_question or "sales" in lowered_question:
         return (
-            "SELECT event_name, ticket_revenue, entertainment_cost, margin "
-            "FROM special_cruise_profit "
-            "ORDER BY margin DESC "
+            "SELECT market_area, SUM(net_revenue) AS net_revenue "
+            "FROM sales_figures_since_2025 "
+            "GROUP BY market_area "
+            "ORDER BY net_revenue DESC "
             "LIMIT 10"
         )
 
-    return "SELECT * FROM qa LIMIT 10"
+    return "SELECT * FROM sales_figures_since_2025 LIMIT 10"
 
 
 def query_agent_result_to_dict(result: QueryAgentResult) -> dict[str, Any]:

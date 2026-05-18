@@ -123,30 +123,30 @@ def build_mock_plan(question: str, catalog_context: str) -> AnalysisPlannerResul
     if "passenger" in lowered_question or "pax" in lowered_question:
         return AnalysisPlannerResult(
             question_type="summary",
-            required_tables=["pax_forecast"],
+            required_tables=["sales_figures_since_2025"],
             required_relationships=[],
-            metrics=["forecast_pax"],
-            dimensions=["route"],
+            metrics=["booked_pax"],
+            dimensions=["route_direction"],
             filters=[],
-            time_period="Use available forecast dates unless the question specifies a date range.",
+            time_period="Use departure_date unless the question asks about booking date.",
             requires_multiple_queries=False,
-            analysis_steps=["Aggregate forecast passenger volume by route."],
-            assumptions=["Passenger volume maps to forecast_pax in pax_forecast."],
+            analysis_steps=["Aggregate booked passenger volume from sales records."],
+            assumptions=["Passenger volume maps to booked_pax in sales_figures_since_2025."],
             confidence="high",
             catalog_context_used=catalog_context,
         )
 
-    if "margin" in lowered_question or "profit" in lowered_question:
+    if "revenue" in lowered_question or "sales" in lowered_question:
         return AnalysisPlannerResult(
-            question_type="ranking",
-            required_tables=["special_cruise_profit"],
+            question_type="summary",
+            required_tables=["sales_figures_since_2025"],
             required_relationships=[],
-            metrics=["margin", "ticket_revenue", "entertainment_cost"],
-            dimensions=["event_name"],
+            metrics=["net_revenue"],
+            dimensions=["market_area"],
             filters=[],
             time_period=None,
             requires_multiple_queries=False,
-            analysis_steps=["Rank special cruise events by margin."],
+            analysis_steps=["Aggregate net revenue from sales records."],
             assumptions=[],
             confidence="high",
             catalog_context_used=catalog_context,
@@ -154,15 +154,15 @@ def build_mock_plan(question: str, catalog_context: str) -> AnalysisPlannerResul
 
     return AnalysisPlannerResult(
         question_type="lookup",
-        required_tables=["qa"],
+        required_tables=["sales_figures_since_2025"],
         required_relationships=[],
-        metrics=["value"],
-        dimensions=["topic", "metric"],
+        metrics=["booked_pax", "net_revenue"],
+        dimensions=["booking_date", "departure_date", "route_direction", "market_area"],
         filters=[],
         time_period=None,
         requires_multiple_queries=False,
-        analysis_steps=["Return relevant rows from the general QA metrics table."],
-        assumptions=["The general QA table is the best available source for this question."],
+        analysis_steps=["Return relevant rows from the sales figures table."],
+        assumptions=["The sales figures table is the only available catalog source."],
         confidence="medium",
         catalog_context_used=catalog_context,
     )

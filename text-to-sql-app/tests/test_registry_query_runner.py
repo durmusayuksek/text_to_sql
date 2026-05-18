@@ -7,18 +7,18 @@ from app.duckdb_layer.query_runner import (
 )
 
 
-def test_catalog_join_query_can_use_multiple_registered_tables() -> None:
+def test_catalog_query_can_use_registered_sales_table() -> None:
     rows = run_query(
         """
-        SELECT pf.route, pf.forecast_pax, rt.target_load_factor
-        FROM pax_forecast pf
-        JOIN pax_route_targets rt ON pf.route = rt.route
+        SELECT route_direction, SUM(booked_pax) AS booked_passengers
+        FROM sales_figures_since_2025
+        GROUP BY route_direction
         LIMIT 10
         """,
     )
 
     assert rows
-    assert {"route", "forecast_pax", "target_load_factor"} <= set(rows[0])
+    assert {"route_direction", "booked_passengers"} <= set(rows[0])
 
 
 def test_query_runner_blocks_tables_outside_catalog() -> None:
@@ -36,13 +36,13 @@ def test_run_queries_validates_each_query() -> None:
             [
                 QueryExecutionRequest(
                     query_id="safe",
-                    purpose="Return QA rows.",
-                    sql="SELECT * FROM qa LIMIT 1",
+                    purpose="Return sales rows.",
+                    sql="SELECT * FROM sales_figures_since_2025 LIMIT 1",
                 ),
                 QueryExecutionRequest(
                     query_id="unsafe",
                     purpose="Attempt to read files.",
-                    sql="SELECT * FROM read_parquet('data/qa/qa.parquet')",
+                    sql="SELECT * FROM read_parquet('data/sales/sales_figures_since_2025.parquet')",
                 ),
             ]
         )
@@ -56,8 +56,8 @@ def test_agent_schema_context_uses_catalog_metadata() -> None:
     context = build_catalog_context()
 
     assert "Data catalog for Question & Answer Text-to-SQL" in context
-    assert "pax_forecast" in context
-    assert "pax_route_targets" in context
+    assert "sales_figures_since_2025" in context
     assert "Relationships:" in context
+    assert "- None defined." in context
     assert "Example SQL:" in context
     assert "read_parquet" not in context

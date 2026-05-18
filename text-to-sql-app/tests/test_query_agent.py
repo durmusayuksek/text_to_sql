@@ -46,10 +46,10 @@ def test_planner_returns_valid_json_shape() -> None:
         """
         {
           "question_type": "summary",
-          "required_tables": ["pax_forecast"],
+          "required_tables": ["sales_figures_since_2025"],
           "required_relationships": [],
-          "metrics": ["forecast_pax"],
-          "dimensions": ["route"],
+          "metrics": ["booked_pax"],
+          "dimensions": ["route_direction"],
           "filters": [],
           "time_period": null,
           "requires_multiple_queries": false,
@@ -62,7 +62,7 @@ def test_planner_returns_valid_json_shape() -> None:
     )
 
     assert result.question_type == "summary"
-    assert result.required_tables == ["pax_forecast"]
+    assert result.required_tables == ["sales_figures_since_2025"]
     assert result.requires_multiple_queries is False
     assert result.catalog_context_used == "catalog"
 
@@ -72,12 +72,12 @@ def test_planner_normalizes_structured_filter_items() -> None:
         """
         {
           "question_type": "summary",
-          "required_tables": ["pax_forecast"],
+          "required_tables": ["sales_figures_since_2025"],
           "required_relationships": [
-            {"left": "pax_forecast.route", "right": "pax_route_targets.route"}
+            {"left": "sales_figures_since_2025.route_code", "right": "route_targets.route_code"}
           ],
-          "metrics": ["forecast_pax"],
-          "dimensions": ["route"],
+          "metrics": ["booked_pax"],
+          "dimensions": ["route_direction"],
           "filters": [
             {"column": "departure_date", "operator": "last_month"}
           ],
@@ -93,7 +93,7 @@ def test_planner_normalizes_structured_filter_items() -> None:
 
     assert result.filters == ['{"column": "departure_date", "operator": "last_month"}']
     assert result.required_relationships == [
-        '{"left": "pax_forecast.route", "right": "pax_route_targets.route"}'
+        '{"left": "sales_figures_since_2025.route_code", "right": "route_targets.route_code"}'
     ]
     assert result.time_period == '{"grain": "month", "offset": -1}'
 
@@ -101,9 +101,9 @@ def test_planner_normalizes_structured_filter_items() -> None:
 def test_mock_planner_uses_catalog_metadata() -> None:
     result = plan_analysis("Show passenger volume by route")
 
-    assert result.required_tables == ["pax_forecast"]
-    assert "forecast_pax" in result.metrics
-    assert "pax_forecast" in result.catalog_context_used
+    assert result.required_tables == ["sales_figures_since_2025"]
+    assert "booked_pax" in result.metrics
+    assert "sales_figures_since_2025" in result.catalog_context_used
     assert "read_parquet" not in result.catalog_context_used
 
 
@@ -113,7 +113,7 @@ def test_query_agent_returns_queries_array() -> None:
 
     assert len(result.queries) == 1
     assert result.queries[0].query_id == "main"
-    assert "FROM pax_forecast" in result.queries[0].sql
+    assert "FROM sales_figures_since_2025" in result.queries[0].sql
     assert result.confidence == "high"
 
 
@@ -124,8 +124,8 @@ def test_valid_query_agent_json_response_parses_queries() -> None:
           "queries": [
             {
               "query_id": "main",
-              "purpose": "Returns sample QA rows.",
-              "sql": "SELECT * FROM qa LIMIT 10"
+              "purpose": "Returns sample sales rows.",
+              "sql": "SELECT * FROM sales_figures_since_2025 LIMIT 10"
             }
           ],
           "assumptions": ["The user wants a sample."],
@@ -135,8 +135,8 @@ def test_valid_query_agent_json_response_parses_queries() -> None:
         schema_context_used="schema context",
     )
 
-    assert result.queries[0].sql == "SELECT * FROM qa LIMIT 10"
-    assert result.queries[0].purpose == "Returns sample QA rows."
+    assert result.queries[0].sql == "SELECT * FROM sales_figures_since_2025 LIMIT 10"
+    assert result.queries[0].purpose == "Returns sample sales rows."
     assert result.confidence == "high"
     assert result.assumptions == ["The user wants a sample."]
     assert result.schema_context_used == "schema context"
@@ -162,19 +162,19 @@ def test_query_agent_response_missing_queries_fails() -> None:
 def test_multiple_duckdb_query_results_are_collected() -> None:
     results = run_queries(
         [
-            QueryExecutionRequest(
-                query_id="metrics",
-                purpose="Return QA metrics.",
-                sql="SELECT * FROM qa LIMIT 1",
-            ),
-            QueryExecutionRequest(
-                query_id="passengers",
-                purpose="Return passenger volume by route.",
-                sql=(
-                    "SELECT route, SUM(forecast_pax) AS forecast_passengers "
-                    "FROM pax_forecast GROUP BY route LIMIT 2"
+                QueryExecutionRequest(
+                    query_id="metrics",
+                    purpose="Return sales rows.",
+                    sql="SELECT * FROM sales_figures_since_2025 LIMIT 1",
                 ),
-            ),
+                QueryExecutionRequest(
+                    query_id="passengers",
+                    purpose="Return passenger volume by route.",
+                    sql=(
+                        "SELECT route_direction, SUM(booked_pax) AS booked_passengers "
+                        "FROM sales_figures_since_2025 GROUP BY route_direction LIMIT 2"
+                    ),
+                ),
         ]
     )
 
@@ -188,13 +188,13 @@ def test_invalid_sql_is_blocked_in_multi_query_execution() -> None:
             [
                 QueryExecutionRequest(
                     query_id="safe",
-                    purpose="Return QA rows.",
-                    sql="SELECT * FROM qa LIMIT 1",
+                    purpose="Return sales rows.",
+                    sql="SELECT * FROM sales_figures_since_2025 LIMIT 1",
                 ),
                 QueryExecutionRequest(
                     query_id="unsafe",
                     purpose="Attempt unsafe SQL.",
-                    sql="DROP TABLE qa",
+                    sql="DROP TABLE sales_figures_since_2025",
                 ),
             ]
         )
@@ -211,8 +211,11 @@ def test_response_agent_returns_business_friendly_answer() -> None:
             QueryExecutionResult(
                 query_id="main",
                 purpose="Aggregate passenger volume by route.",
-                sql="SELECT route, SUM(forecast_pax) AS forecast_passengers FROM pax_forecast GROUP BY route",
-                rows=[{"route": "Stockholm-Tallinn", "forecast_passengers": 1840}],
+                sql=(
+                    "SELECT route_direction, SUM(booked_pax) AS booked_passengers "
+                    "FROM sales_figures_since_2025 GROUP BY route_direction"
+                ),
+                rows=[{"route_direction": "HEL-STO", "booked_passengers": 1840}],
             )
         ],
     )
@@ -223,13 +226,13 @@ def test_response_agent_returns_business_friendly_answer() -> None:
 
 
 def test_response_agent_openai_payload_uses_minimized_query_results() -> None:
-    plan = plan_analysis("Show QA rows")
-    query_agent_result = generate_sql("Show QA rows", plan)
+    plan = plan_analysis("Show sales rows")
+    query_agent_result = generate_sql("Show sales rows", plan)
     query_results = [
         QueryExecutionResult(
             query_id="main",
-            purpose="Return QA rows.",
-            sql="SELECT * FROM qa LIMIT 10",
+            purpose="Return sales rows.",
+            sql="SELECT * FROM sales_figures_since_2025 LIMIT 10",
             rows=[
                 {"metric": f"metric_{index}", "value": index}
                 for index in range(10)
@@ -238,7 +241,7 @@ def test_response_agent_openai_payload_uses_minimized_query_results() -> None:
     ]
 
     messages = build_response_openai_messages(
-        question="Show QA rows",
+        question="Show sales rows",
         plan=plan,
         query_agent_result=query_agent_result,
         query_results=query_results,
@@ -259,13 +262,13 @@ def test_response_agent_openai_payload_uses_minimized_query_results() -> None:
 def test_response_agent_max_sample_rows_setting_is_respected(monkeypatch) -> None:
     from app.config import Settings
 
-    plan = plan_analysis("Show QA rows")
-    query_agent_result = generate_sql("Show QA rows", plan)
+    plan = plan_analysis("Show sales rows")
+    query_agent_result = generate_sql("Show sales rows", plan)
     query_results = [
         QueryExecutionResult(
             query_id="main",
-            purpose="Return QA rows.",
-            sql="SELECT * FROM qa LIMIT 10",
+            purpose="Return sales rows.",
+            sql="SELECT * FROM sales_figures_since_2025 LIMIT 10",
             rows=[
                 {"metric": f"metric_{index}", "value": index}
                 for index in range(4)
@@ -301,7 +304,7 @@ def test_response_agent_max_sample_rows_setting_is_respected(monkeypatch) -> Non
     )
 
     generate_response(
-        question="Show QA rows",
+        question="Show sales rows",
         plan=plan,
         query_agent_result=query_agent_result,
         query_results=query_results,
@@ -512,16 +515,16 @@ def test_api_ask_includes_query_results_when_debug_enabled(monkeypatch) -> None:
 def test_empty_query_results_do_not_fail_multi_query_execution() -> None:
     results = run_queries(
         [
-            QueryExecutionRequest(
-                query_id="empty",
-                purpose="Return no QA rows.",
-                sql="SELECT * FROM qa WHERE 1 = 0",
-            ),
-            QueryExecutionRequest(
-                query_id="non_empty",
-                purpose="Return one QA row.",
-                sql="SELECT * FROM qa LIMIT 1",
-            ),
+                QueryExecutionRequest(
+                    query_id="empty",
+                    purpose="Return no sales rows.",
+                    sql="SELECT * FROM sales_figures_since_2025 WHERE 1 = 0",
+                ),
+                QueryExecutionRequest(
+                    query_id="non_empty",
+                    purpose="Return one sales row.",
+                    sql="SELECT * FROM sales_figures_since_2025 LIMIT 1",
+                ),
         ]
     )
 
@@ -531,17 +534,17 @@ def test_empty_query_results_do_not_fail_multi_query_execution() -> None:
 
 
 def test_empty_query_result_creates_response_limitation() -> None:
-    plan = plan_analysis("Show QA rows")
-    query_agent_result = generate_sql("Show QA rows", plan)
+    plan = plan_analysis("Show sales rows")
+    query_agent_result = generate_sql("Show sales rows", plan)
     response = generate_response(
-        question="Show QA rows",
+        question="Show sales rows",
         plan=plan,
         query_agent_result=query_agent_result,
         query_results=[
             QueryExecutionResult(
                 query_id="empty",
-                purpose="Return no QA rows.",
-                sql="SELECT * FROM qa WHERE 1 = 0",
+                purpose="Return no sales rows.",
+                sql="SELECT * FROM sales_figures_since_2025 WHERE 1 = 0",
                 rows=[],
                 warnings=["Query 'empty' returned no rows."],
             )
@@ -598,7 +601,10 @@ def test_failed_api_request_writes_unsuccessful_jsonl_event(monkeypatch, tmp_pat
     )
 
     client = TestClient(app)
-    response = client.post("/api/ask", json={"question": "Drop the qa table"})
+    response = client.post(
+        "/api/ask",
+        json={"question": "Drop the sales figures table"},
+    )
 
     assert response.status_code == 400
     events = read_jsonl(log_path)
@@ -679,7 +685,7 @@ def test_logging_failure_does_not_break_api(monkeypatch) -> None:
 
 def test_destructive_intent_guard_blocks_question() -> None:
     with pytest.raises(DestructiveIntentError, match="delete"):
-        validate_safe_question_intent("Please delete old QA rows")
+        validate_safe_question_intent("Please delete old sales rows")
 
 
 def test_api_ask_blocks_destructive_intent_before_query_agent(monkeypatch) -> None:
@@ -696,7 +702,10 @@ def test_api_ask_blocks_destructive_intent_before_query_agent(monkeypatch) -> No
     )
 
     client = TestClient(app)
-    response = client.post("/api/ask", json={"question": "Drop the qa table"})
+    response = client.post(
+        "/api/ask",
+        json={"question": "Drop the sales figures table"},
+    )
 
     assert response.status_code == 400
     assert "Destructive or modifying requests are not allowed" in response.json()["detail"]
@@ -713,14 +722,14 @@ def test_openai_mode_uses_mocked_openai_responses(monkeypatch) -> None:
             """
             {
               "question_type": "lookup",
-              "required_tables": ["qa"],
+              "required_tables": ["sales_figures_since_2025"],
               "required_relationships": [],
-              "metrics": ["value"],
-              "dimensions": ["topic", "metric"],
+              "metrics": ["booked_pax"],
+              "dimensions": ["route_direction"],
               "filters": [],
               "time_period": null,
               "requires_multiple_queries": false,
-              "analysis_steps": ["Return QA rows."],
+              "analysis_steps": ["Return sales rows."],
               "assumptions": [],
               "confidence": "high"
             }
@@ -730,8 +739,8 @@ def test_openai_mode_uses_mocked_openai_responses(monkeypatch) -> None:
               "queries": [
                 {
                   "query_id": "main",
-                  "purpose": "Returns QA rows.",
-                  "sql": "SELECT * FROM qa LIMIT 10"
+                  "purpose": "Returns sales rows.",
+                  "sql": "SELECT * FROM sales_figures_since_2025 LIMIT 10"
                 }
               ],
               "assumptions": [],
@@ -756,10 +765,10 @@ def test_openai_mode_uses_mocked_openai_responses(monkeypatch) -> None:
         fake_create_chat_completion,
     )
 
-    plan = plan_analysis("Show QA rows")
-    result = generate_sql("Show QA rows", plan)
+    plan = plan_analysis("Show sales rows")
+    result = generate_sql("Show sales rows", plan)
 
-    assert result.queries[0].sql == "SELECT * FROM qa LIMIT 10"
+    assert result.queries[0].sql == "SELECT * FROM sales_figures_since_2025 LIMIT 10"
     assert "read_parquet" not in captured_messages[1][1]["content"]
     assert "Analysis Planner output" in captured_messages[1][1]["content"]
 
@@ -772,13 +781,13 @@ def test_openai_mode_missing_api_key_fails(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(ConfigurationError, match="OPENAI_API_KEY is required"):
-        plan_analysis("Show QA rows")
+        plan_analysis("Show sales rows")
 
     get_settings.cache_clear()
 
 
 def test_openai_low_confidence_query_response_fails(monkeypatch) -> None:
-    plan = plan_analysis("Show QA rows")
+    plan = plan_analysis("Show sales rows")
 
     get_settings.cache_clear()
     monkeypatch.setenv("AGENT_MODE", "openai")
@@ -791,7 +800,7 @@ def test_openai_low_confidence_query_response_fails(monkeypatch) -> None:
             {
               "query_id": "main",
               "purpose": "Low confidence query.",
-              "sql": "SELECT * FROM qa LIMIT 10"
+              "sql": "SELECT * FROM sales_figures_since_2025 LIMIT 10"
             }
           ],
           "assumptions": ["Insufficient metadata."],
@@ -805,22 +814,22 @@ def test_openai_low_confidence_query_response_fails(monkeypatch) -> None:
     )
 
     with pytest.raises(QueryAgentLowConfidenceError, match="low confidence"):
-        generate_sql("Show QA rows", plan)
+        generate_sql("Show sales rows", plan)
 
     get_settings.cache_clear()
 
 
 def test_openai_messages_include_only_metadata_and_plan_context() -> None:
-    plan = plan_analysis("Show QA rows")
+    plan = plan_analysis("Show sales rows")
     messages = build_openai_messages(
-        question="Show QA rows",
+        question="Show sales rows",
         plan=plan,
         schema_context="Catalog metadata only",
     )
 
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
-    assert "Show QA rows" in messages[1]["content"]
+    assert "Show sales rows" in messages[1]["content"]
     assert "Catalog metadata only" in messages[1]["content"]
     assert "Analysis Planner output" in messages[1]["content"]
     assert "read_parquet(" not in messages[1]["content"]
