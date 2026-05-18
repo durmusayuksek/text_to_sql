@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+
 RedactionStrategy = Literal["omit", "mask", "hash"]
 
 
@@ -42,125 +43,30 @@ class DataCatalog:
     example_sql: tuple[str, ...]
 
 
-DATA_CATALOG = DataCatalog(
+DEFAULT_DATA_CATALOG = DataCatalog(
     description=(
         "Central catalog for the single Question & Answer Text-to-SQL workflow. "
-        "Tables are available analytical data sources, not selectable application modules."
+        "Create backend/app/catalog_private.py locally to register private data."
     ),
-    tables=(
-        TableDefinition(
-            table_name="sales_figures_since_2025",
-            data_path="data/sales/sales_figures_since_2025.parquet",
-            description=(
-                "Sales and passenger booking figures since 2025 by booking date, "
-                "departure date, route, market, ship, and sales planning segment."
-            ),
-            columns=(
-                ColumnDefinition(
-                    name="booking_date",
-                    type="DATE",
-                    description="Date when the sale or booking was created.",
-                    examples=("2025-06-18",),
-                    business_terms=("booking date", "sale date", "created date"),
-                ),
-                ColumnDefinition(
-                    name="departure_date",
-                    type="DATE",
-                    description="Scheduled departure date for the booked trip.",
-                    examples=("2025-06-24",),
-                    business_terms=("departure date", "sailing date", "travel date"),
-                ),
-                ColumnDefinition(
-                    name="route_code",
-                    type="VARCHAR",
-                    description="Commercial route code for the trip.",
-                    examples=("TUR-STO", "TAL-HEL"),
-                    business_terms=("route", "line"),
-                ),
-                ColumnDefinition(
-                    name="route_direction",
-                    type="VARCHAR",
-                    description="Directional route code for the sailing leg.",
-                    examples=("TUR-STO", "HEL-TAL"),
-                    business_terms=("direction", "route direction"),
-                ),
-                ColumnDefinition(
-                    name="market_area",
-                    type="VARCHAR",
-                    description="Sales market area for the booking.",
-                    examples=("SCANDINAVIA", "BALTIA", "FINLAND"),
-                    business_terms=("market", "market area", "sales market"),
-                ),
-                ColumnDefinition(
-                    name="ship_type",
-                    type="VARCHAR",
-                    description="Type or category of ship used for the trip.",
-                    examples=("Shuttle",),
-                    business_terms=("ship type", "vessel type"),
-                ),
-                ColumnDefinition(
-                    name="ship_code",
-                    type="VARCHAR",
-                    description="Ship code or vessel name for the trip.",
-                    examples=("MEGASTAR", "S.PRINCESS"),
-                    business_terms=("ship", "vessel"),
-                ),
-                ColumnDefinition(
-                    name="sales_planning_segment",
-                    type="VARCHAR",
-                    description="High-level sales planning segment.",
-                    examples=("B2C",),
-                    business_terms=("segment", "sales segment"),
-                ),
-                ColumnDefinition(
-                    name="sales_planning_subsegment",
-                    type="VARCHAR",
-                    description="Detailed sales planning subsegment.",
-                    examples=("B2C PUBLIC PRICE", "B2C CAMPAIGNS&OFFERS"),
-                    business_terms=("subsegment", "sales subsegment"),
-                ),
-                ColumnDefinition(
-                    name="booked_pax",
-                    type="BIGINT",
-                    description="Number of booked passengers.",
-                    examples=("30",),
-                    business_terms=(
-                        "passengers",
-                        "pax",
-                        "booked passengers",
-                        "passenger volume",
-                    ),
-                ),
-                ColumnDefinition(
-                    name="net_revenue",
-                    type="DOUBLE",
-                    description="Net revenue amount from the booking records.",
-                    examples=("1844.31",),
-                    business_terms=(
-                        "sales",
-                        "revenue",
-                        "net revenue",
-                    ),
-                ),
-            ),
-        ),
-    ),
+    tables=(),
     relationships=(),
-    example_questions=(
-        "Show booked passengers by route since 2025.",
-        "What is net revenue by market area?",
-        "Show monthly net revenue by booking date.",
-        "Which sales planning segments have the highest booked passengers?",
-        "Tell me the number of pax on HEL-STO for the departure month of April 2026.",
-    ),
-    example_sql=(
-        "SELECT route_code, SUM(booked_pax) AS booked_passengers FROM sales_figures_since_2025 GROUP BY route_code ORDER BY booked_passengers DESC LIMIT 10",
-        "SELECT market_area, SUM(net_revenue) AS net_revenue FROM sales_figures_since_2025 GROUP BY market_area ORDER BY net_revenue DESC LIMIT 10",
-        "SELECT date_trunc('month', booking_date) AS booking_month, SUM(net_revenue) AS net_revenue FROM sales_figures_since_2025 GROUP BY booking_month ORDER BY booking_month LIMIT 24",
-        "SELECT sales_planning_segment, SUM(booked_pax) AS booked_passengers FROM sales_figures_since_2025 GROUP BY sales_planning_segment ORDER BY booked_passengers DESC LIMIT 10",
-        "SELECT SUM(booked_pax) AS booked_pax FROM sales_figures_since_2025 WHERE route_direction = 'HEL-STO' AND departure_date >= DATE '2026-04-01' AND departure_date < DATE '2026-05-01'",
-    ),
+    example_questions=(),
+    example_sql=(),
 )
+
+
+def load_data_catalog() -> DataCatalog:
+    try:
+        from app.catalog_private import DATA_CATALOG as private_catalog
+    except ModuleNotFoundError as error:
+        if error.name != "app.catalog_private":
+            raise
+        return DEFAULT_DATA_CATALOG
+
+    return private_catalog
+
+
+DATA_CATALOG = load_data_catalog()
 
 
 def get_data_catalog() -> DataCatalog:
@@ -180,18 +86,21 @@ def build_catalog_context() -> str:
         "Available tables:",
     ]
 
-    for table in catalog.tables:
-        lines.append(f"- {table.table_name}: {table.description}")
-        for column in table.columns:
-            extras = []
-            if column.examples:
-                extras.append(f"examples: {', '.join(column.examples)}")
-            if column.business_terms:
-                extras.append(f"business terms: {', '.join(column.business_terms)}")
-            suffix = f" ({'; '.join(extras)})" if extras else ""
-            lines.append(
-                f"  - {column.name} [{column.type}]: {column.description}{suffix}"
-            )
+    if catalog.tables:
+        for table in catalog.tables:
+            lines.append(f"- {table.table_name}: {table.description}")
+            for column in table.columns:
+                extras = []
+                if column.examples:
+                    extras.append(f"examples: {', '.join(column.examples)}")
+                if column.business_terms:
+                    extras.append(f"business terms: {', '.join(column.business_terms)}")
+                suffix = f" ({'; '.join(extras)})" if extras else ""
+                lines.append(
+                    f"  - {column.name} [{column.type}]: {column.description}{suffix}"
+                )
+    else:
+        lines.append("- None configured.")
 
     lines.extend(["", "Relationships:"])
     if catalog.relationships:
@@ -206,9 +115,15 @@ def build_catalog_context() -> str:
         lines.append("- None defined.")
 
     lines.extend(["", "Example questions:"])
-    lines.extend(f"- {question}" for question in catalog.example_questions)
+    if catalog.example_questions:
+        lines.extend(f"- {question}" for question in catalog.example_questions)
+    else:
+        lines.append("- None configured.")
 
     lines.extend(["", "Example SQL:"])
-    lines.extend(f"- {sql}" for sql in catalog.example_sql)
+    if catalog.example_sql:
+        lines.extend(f"- {sql}" for sql in catalog.example_sql)
+    else:
+        lines.append("- None configured.")
 
     return "\n".join(lines)

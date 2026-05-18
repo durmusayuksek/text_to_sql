@@ -9,6 +9,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+backend/app/catalog_private.py
 
 # Frontend
 frontend/node_modules/
